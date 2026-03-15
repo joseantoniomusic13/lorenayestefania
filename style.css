@@ -204,7 +204,7 @@ nav a:hover::after {
   left: -20px;
   right: -20px;
   bottom: -20px;
-  background: url("images/hero.jpg") center/cover no-repeat;
+  background: url("hero.jpg") center/cover no-repeat;
   filter: blur(6px);
   z-index: 0;
 }

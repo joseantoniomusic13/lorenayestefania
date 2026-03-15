@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lorena & Estefanía | Nuestra Boda</title>
+
+    <!-- Fuertes elegantes y románticas -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&family=Montserrat:wght@300;400;500;600&display=swap"
+        rel="stylesheet">
+
+    <!-- Phosphor Icons (Librería moderna de iconos) -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <header>
+        <div class="logo">L <span>&</span> E</div>
+        <nav>
+            <a href="#itinerario">Itinerario</a>
+            <a href="#ubicacion">Ubicación</a>
+            <a href="#alojamiento">Alojamiento</a>
+            <a href="#wedshoots">Fotos</a>
+            <a href="#rsvp">Confirmación</a>
+            <a href="#contacto">Contacto</a>
+        </nav>
+    </header>
+
+    <section class="hero">
+        <div class="hero-overlay"></div>
+        <div class="hero-text fade-in">
+            <p class="subtitle">NOS CASAMOS</p>
+            <h1>
+                Lorena <br>
+                <span>&amp;</span> <br>
+                Estefanía
+            </h1>
+
+            <div class="info">
+                <div class="info-item">
+                    <i class="ph ph-calendar-blank animated-icon icon-pulse"></i>
+                    <span>15 · 05 · 2027</span>
+                </div>
+                <div class="info-item">
+                    <i class="ph ph-map-pin-line animated-icon icon-float"></i>
+                    <span>Lucena, Córdoba</span>
+                </div>
+            </div>
+
+            <a href="#rsvp" class="btn">
+                Confirmar asistencia <i class="ph ph-envelope-simple"></i>
+            </a>
+        </div>
+    </section>
+
+    <section class="countdown">
+        <h3 class="section-title">Cuenta atrás</h3>
+        <div id="timer" class="timer-container glass-effect">
+            <div class="time-box"><span id="days">0</span>
+                <p>días</p>
+            </div>
+            <div class="time-box"><span id="hours">0</span>
+                <p>h</p>
+            </div>
+            <div class="time-box"><span id="minutes">0</span>
+                <p>m</p>
+            </div>
+            <div class="time-box"><span id="seconds">0</span>
+                <p>s</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="itinerario" class="section bg-light">
+        <h2 class="section-title"><i class="ph ph-clock icon-bounce"></i> Itinerario</h2>
+        <p class="section-subtitle">Los momentos clave de nuestro gran día.</p>
+
+        <div class="cards">
+            <div class="card hover-animate">
+                <div class="icon-wrapper"><i class="ph ph-bus"></i></div>
+                <h3>Autobuses</h3>
+                <p>Salida desde Lucena</p>
+                <p><strong>[Hora] h</strong></p>
+            </div>
+
+            <div class="card hover-animate">
+                <div class="icon-wrapper"><i class="ph ph-wine"></i></div>
+                <h3>Copa de Bienvenida</h3>
+                <p>Para ir calentando motores</p>
+                <p><strong>[Hora] h</strong></p>
+            </div>
+
+            <div class="card hover-animate">
+                <div class="icon-wrapper"><i class="ph ph-heart"></i></div>
+                <h3>Ceremonia</h3>
+                <p>El "Sí, quiero"</p>
+                <p><strong>[Hora] h</strong></p>
+            </div>
+
+            <div class="card hover-animate">
+                <div class="icon-wrapper"><i class="ph ph-fork-knife"></i></div>
+                <h3>Banquete</h3>
+                <p>A disfrutar de la comida</p>
+                <p><strong>[Hora] h</strong></p>
+            </div>
+
+            <div class="card hover-animate">
+                <div class="icon-wrapper"><i class="ph ph-music-notes"></i></div>
+                <h3>Fiesta</h3>
+                <p>¡A darlo todo en la pista!</p>
+                <p><strong>Hasta que el cuerpo aguante</strong></p>
+            </div>
+        </div>
+    </section>
+
+    <section id="ubicacion" class="section">
+        <h2 class="section-title"><i class="ph ph-map-trifold icon-beat"></i> Jardines Pilar de la Dehesa</h2>
+        <p class="section-subtitle">Lucena, Córdoba <br> 15 de mayo de 2027</p>
+        <a class="btn-outline" href="javascript:void(0);" id="btn-map">Cómo llegar <i class="ph ph-arrow-right"></i></a>
+
+        <div id="map-container" class="map-container fade-in"
+            style="display: none; margin-top: 30px; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-md);">
+            <iframe
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3169.8942197442493!2d-4.522829505468217!3d37.39233380010601!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0xd6d7086111fedcd%3A0xd4db5ce846fbb910!2sJardines%20Palacio%20de%20la%20Dehesa!5e0!3m2!1ses!2ses!4v1773584110928!5m2!1ses!2ses"
+                width="100%" height="400" style="border:0;" allowfullscreen="" loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"></iframe>
+        </div>
+
+    </section>
+
+    <section id="alojamiento" class="section bg-light">
+        <h2 class="section-title"><i class="ph ph-buildings icon-float"></i> Alojamiento</h2>
+
+        <div class="cards">
+            <a href="https://hotelsantodomingolucena.com/habitaciones" target="_blank" rel="noopener noreferrer"
+                style="text-decoration: none;">
+                <div class="card hover-animate">
+                    <div class="icon-wrapper"><i class="ph ph-bed"></i></div>
+                    <h3>Hotel Santo Domingo</h3>
+                    <p>Centro de Lucena</p>
+                </div>
+            </a>
+
+            <a href="https://www.hotellosbronces.com/" target="_blank" rel="noopener noreferrer"
+                style="text-decoration: none;">
+                <div class="card hover-animate">
+                    <div class="icon-wrapper"><i class="ph ph-star"></i></div>
+                    <h3>Hotel Los Bronces</h3>
+                    <p>Afueras de Lucena</p>
+                </div>
+            </a>
+
+            <a href="https://lolaalojamientos.com/" target="_blank" rel="noopener noreferrer"
+                style="text-decoration: none;">
+                <div class="card hover-animate">
+                    <div class="icon-wrapper"><i class="ph ph-storefront"></i></div>
+                    <h3>Hotel Doña Lola</h3>
+                    <p>Centro de Lucena</p>
+                </div>
+            </a>
+
+            <a href="https://www.booking.com/hotel/es/alyussana.es.html?msockid=2b71e1747374632324e6f52772dc6236"
+                target="_blank" rel="noopener noreferrer" style="text-decoration: none;">
+                <div class="card hover-animate">
+                    <div class="icon-wrapper"><i class="ph ph-house-line"></i></div>
+                    <h3>Hotel Al-Yussana</h3>
+                    <p>Centro de Lucena</p>
+                </div>
+            </a>
+        </div>
+    </section>
+
+    <section id="wedshoots" class="section">
+        <h2 class="section-title"><i class="ph ph-camera icon-beat"></i> WedShoots</h2>
+        <p class="section-subtitle">¡Ayúdanos a capturar cada momento! Descarga la app WedShoots para compartir tus
+            fotos con nosotros.</p>
+
+        <div class="cards" style="justify-content: center; max-width: 600px; margin: 0 auto;">
+            <a href="https://play.google.com/store/apps/details?id=net.bodas.android.wedshoots&pcampaignid=web_share"
+                target="_blank" rel="noopener noreferrer" style="text-decoration: none;">
+                <div class="card hover-animate">
+                    <div class="icon-wrapper"><i class="ph ph-android-logo"></i></div>
+                    <h3>Android</h3>
+                    <p>Descargar en Google Play</p>
+                </div>
+            </a>
+
+            <a href="https://apps.apple.com/es/app/wedshoots/id660256196" target="_blank" rel="noopener noreferrer"
+                style="text-decoration: none;">
+                <div class="card hover-animate">
+                    <div class="icon-wrapper"><i class="ph ph-apple-logo"></i></div>
+                    <h3>iPhone</h3>
+                    <p>Descargar en App Store</p>
+                </div>
+            </a>
+        </div>
+        <div style="text-align: center; margin-top: 2rem;">
+            <p style="font-size: 1.2rem; font-weight: 600; color: var(--text-dark);">Código del álbum: <strong
+                    style="color: var(--primary);">ESf883f265</strong></p>
+        </div>
+    </section>
+
+    <section class="section bg-light">
+        <h2 class="section-title"><i class="ph ph-warning-circle icon-pulse"></i> Alergias e intolerancias</h2>
+        <p class="section-subtitle">Por favor, indícanos si tienes algún requerimiento especial en el formulario final.
+        </p>
+
+        <div class="cards allergens-cards">
+            <div class="card hover-animate">
+                <div class="icon-wrapper"><i class="ph ph-leaf"></i></div>
+                <p>Celíaco</p>
+            </div>
+            <div class="card hover-animate">
+                <div class="icon-wrapper"><i class="ph ph-plant"></i></div>
+                <p>Vegano / Vegetariano</p>
+            </div>
+            <div class="card hover-animate">
+                <div class="icon-wrapper"><i class="ph ph-cow"></i></div>
+                <p>Intolerancia a la lactosa</p>
+            </div>
+            <div class="card hover-animate">
+                <div class="icon-wrapper"><i class="ph ph-shield-warning"></i></div>
+                <p>Otras alergias</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="dress-code" class="section bg-light">
+        <h2 class="section-title"><i class="ph ph-coat-hanger icon-float"></i> Código de vestimenta</h2>
+        <p class="section-subtitle">Queremos que estéis guapísimos, pero os pedimos un pequeño detalle para nuestro gran
+            día.</p>
+
+        <div class="cards" style="justify-content: center; max-width: 700px; margin: 0 auto; display: flex; gap: 30px;">
+            <div class="card hover-animate"
+                style="flex: 1; border-top: 4px solid var(--primary); background: var(--bg-color);">
+                <div class="icon-wrapper"><i class="ph ph-drop"></i></div>
+                <h3>Para todos</h3>
+                <p style="font-size: 1.05rem; margin-top: 15px;">Nos encantaría que nuestra boda esté llena de color.
+                    Por eso os pedimos <strong>evitar el blanco o colores similares</strong>.</p>
+            </div>
+
+            <div class="card hover-animate"
+                style="flex: 1; border-top: 4px solid var(--text-dark); background: var(--bg-color);">
+                <div class="icon-wrapper" style="background: var(--text-dark);"><i class="ph ph-warning"
+                        style="color: white;"></i></div>
+                <h3>Para ellas</h3>
+                <p style="font-size: 1.05rem; margin-top: 15px;">Además, rogamos a las mujeres en especial,
+                    <strong>evitar el color negro</strong>.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <section id="rsvp" class="section">
+        <h2 class="section-title"><i class="ph ph-envelope-open icon-bounce"></i> Confirma tu asistencia</h2>
+        <p class="section-subtitle">Esperamos poder celebrar este día tan especial contigo.</p>
+
+        <form id="rsvp-form" class="glass-form fade-in">
+            <div class="input-group">
+                <i class="ph ph-users"></i>
+                <select id="guest-count" required>
+                    <option value="" disabled selected>Número de asistentes</option>
+                    <option value="0">No podremos asistir</option>
+                    <option value="1">1 Persona</option>
+                    <option value="2">2 Personas</option>
+                    <option value="3">3 Personas</option>
+                    <option value="4">4 Personas</option>
+                    <option value="5">5 Personas</option>
+                    <option value="6">6 Personas</option>
+                    <option value="7">7 Personas</option>
+                    <option value="8">8 Personas</option>
+                    <option value="9">9 Personas</option>
+                    <option value="10">10 Personas</option>
+                </select>
+            </div>
+
+            <div id="guests-container">
+                <!-- Filas generadas por JS -->
+            </div>
+
+            <button type="submit" id="btn-submit-rsvp" class="btn btn-submit" style="display: none;">Confirmar <i
+                    class="ph ph-paper-plane-right"></i></button>
+            <div id="form-message" style="display: none; text-align: center; margin-top: 20px; font-weight: 500;"></div>
+        </form>
+    </section>
+
+    <section id="contacto" class="section bg-light">
+        <h2 class="section-title"><i class="ph ph-address-book icon-float"></i> Contacto</h2>
+        <p class="section-subtitle">Para cualquier duda, podéis escribirnos o llamarnos directamente.</p>
+
+        <div class="cards">
+            <div class="card hover-animate">
+                <div class="icon-wrapper"><i class="ph ph-phone"></i></div>
+                <h3>Lorena</h3>
+                <p><a href="mailto:correo-lorena@ejemplo.com" class="contact-link">lorenayestefania2027@gmail.com</a>
+                </p>
+                <p><a href="tel:+34600000000" class="contact-link">+34 650 21 11 04</a> <!-- Cambia aquí el número -->
+                </p>
+            </div>
+
+            <div class="card hover-animate">
+                <div class="icon-wrapper"><i class="ph ph-phone"></i></div>
+                <h3>Estefanía</h3>
+                <p><a href="mailto:correo-estefania@ejemplo.com" class="contact-link">lorenayestefania2027@gmail.com</a>
+                </p>
+                <p><a href="tel:+34600000000" class="contact-link">+34 692 705 901</a> <!-- Cambia aquí el número -->
+                </p>
+            </div>
+        </div>
+    </section>
+
+
+
+    <footer>
+        <p>Hecho con cariño para mis primas, las más bellas del mundo
+            <br>José Antonio <i class="ph-fill ph-heart icon-pulse" style="color: var(--primary);"></i>
+        </p>
+    </footer>
+
+    <!-- Botón de música flotante -->
+    <button id="music-btn" class="music-btn">
+        <i class="ph ph-speaker-slash"></i>
+    </button>
+    <audio id="bg-music" loop>
+        <source src="music.mp3" type="audio/mpeg">
+        Tu navegador no soporta el elemento de audio.
+    </audio>
+
+    <script src="script.js"></script>
+
+</body>
+
+</html>

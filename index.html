@@ -16,7 +16,7 @@
     <!-- Phosphor Icons (Librería moderna de iconos) -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
 </head>
 
 <body>
@@ -338,7 +338,118 @@
         <p>Hecho con cariño para mis primas, las más bellas del mundo
             <br>José Antonio <i class="ph-fill ph-heart icon-pulse" style="color: var(--primary);"></i>
         </p>
+        <!-- Botón discreto de acceso privado -->
+        <button id="btn-area-privada" class="btn-area-privada" title="Acceso organizadoras">
+            <i class="ph ph-lock-simple"></i> Área privada
+        </button>
     </footer>
+
+    <!-- ============================================================
+         MODAL DE ACCESO PRIVADO (contraseña)
+         ============================================================ -->
+    <div id="modal-privado" class="modal-privado" role="dialog" aria-modal="true" aria-labelledby="modal-privado-title">
+        <div class="modal-privado-overlay" id="modal-privado-overlay"></div>
+        <div class="modal-privado-box glass-effect">
+            <button class="modal-privado-close" id="btn-cerrar-modal" aria-label="Cerrar">
+                <i class="ph ph-x"></i>
+            </button>
+            <div class="modal-privado-icon">
+                <i class="ph ph-shield-check"></i>
+            </div>
+            <h2 id="modal-privado-title">Área privada</h2>
+            <p>Solo para las organizadoras de la boda 💍</p>
+            <div class="input-group modal-privado-input">
+                <i class="ph ph-lock-simple"></i>
+                <input type="password" id="input-password-privada" placeholder="Contraseña…"
+                    autocomplete="current-password">
+            </div>
+            <div id="modal-error-msg" class="modal-error-msg" style="display:none;">
+                <i class="ph ph-warning-circle"></i> Contraseña incorrecta. Inténtalo de nuevo.
+            </div>
+            <button class="btn btn-submit btn-privado-entrar" id="btn-entrar-privado"
+                style="width:100%; justify-content:center; margin-top:10px;">
+                Entrar <i class="ph ph-arrow-right"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         MODAL DE DETALLE DE RESERVA
+         ============================================================ -->
+    <div id="modal-detalle" class="modal-privado modal-detalle" role="dialog" aria-modal="true">
+        <div class="modal-privado-overlay" id="modal-detalle-overlay"></div>
+        <div class="modal-detalle-box glass-effect">
+            <button class="modal-privado-close" id="btn-cerrar-detalle" aria-label="Cerrar">
+                <i class="ph ph-x"></i>
+            </button>
+            <!-- Cabecera dinámica -->
+            <div id="detalle-header" class="detalle-header"></div>
+            <!-- Cuerpo dinámico: se rellena por JS -->
+            <div id="detalle-body" class="detalle-body"></div>
+        </div>
+    </div>
+    <!-- ============================================================
+         PANEL PRIVADO – Vista de reservas (oculto hasta login)
+         ============================================================ -->
+    <section id="panel-privado" class="section bg-light panel-privado" style="display:none;">
+        <div class="panel-privado-header">
+            <h2 class="section-title">
+                <i class="ph ph-clipboard-text icon-bounce"></i> Panel de Organizadoras
+            </h2>
+            <p class="section-subtitle">Todas las confirmaciones de asistencia recibidas.</p>
+            <button id="btn-cerrar-panel" class="btn-outline btn-cerrar-panel">
+                <i class="ph ph-lock-open"></i> Cerrar sesión
+            </button>
+        </div>
+
+        <!-- Indicador de carga -->
+        <div id="privado-loading" class="privado-loading">
+            <div class="privado-spinner"></div>
+            <p>Cargando reservas…</p>
+        </div>
+
+        <!-- Resumen de stats -->
+        <div id="privado-stats" class="privado-stats" style="display:none;">
+            <div class="privado-stat-card">
+                <span id="stat-asisten" class="privado-stat-num">0</span>
+                <span class="privado-stat-label">Total Asisten</span>
+            </div>
+            <div class="privado-stat-card">
+                <span id="stat-adultos" class="privado-stat-num">0</span>
+                <span class="privado-stat-label">Menú Adulto</span>
+            </div>
+            <div class="privado-stat-card">
+                <span id="stat-ninos" class="privado-stat-num">0</span>
+                <span class="privado-stat-label">Menú Niño</span>
+            </div>
+            <div class="privado-stat-card">
+                <span id="stat-sin-alergia" class="privado-stat-num">0</span>
+                <span class="privado-stat-label">Sin Alergia</span>
+            </div>
+            <div class="privado-stat-card">
+                <span id="stat-con-alergia" class="privado-stat-num">0</span>
+                <span class="privado-stat-label">Con Alergia</span>
+            </div>
+            <div class="privado-stat-card clicks-allowed" id="btn-toggle-canciones"
+                style="display:none; cursor:pointer;" title="Click para ver canciones">
+                <span id="count-canciones" class="privado-stat-num">0</span>
+                <span class="privado-stat-label">Canciones</span>
+            </div>
+        </div>
+
+        <!-- Lista Desplegable Canciones Recomendadas -->
+        <ul id="lista-canciones" class="lista-canciones"
+            style="display:none; max-width:800px; margin: 0 auto 40px auto;"></ul>
+
+        <!-- Tarjetas de reservas -->
+        <div id="privado-cards" class="cards privado-cards"></div>
+
+        <!-- Mensaje de error de carga -->
+        <div id="privado-error" class="privado-error-msg" style="display:none;">
+            <i class="ph ph-warning-circle"></i>
+            <p>No se pudieron cargar los datos. Comprueba la URL del script de Google.</p>
+        </div>
+    </section>
 
     <!-- Botón de música flotante -->
     <button id="music-btn" class="music-btn">
@@ -349,7 +460,7 @@
         Tu navegador no soporta el elemento de audio.
     </audio>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=2"></script>
 
 </body>
 

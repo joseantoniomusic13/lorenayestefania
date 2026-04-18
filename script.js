@@ -55,7 +55,7 @@ if (guestCountSelect) {
                     </div>
                     
                     <p style="margin-bottom: 5px; font-weight: 500; font-size: 0.95rem;">¿Alguna alergia o intolerancia?</p>
-                    <div class="radio-group" style="margin-bottom: 10px;">
+                    <div class="radio-group" style="margin-bottom: 0px;">
                         <input type="radio" name="has-allergy-${i}" id="allergy-no-${i}" value="no" class="hidden-radio allergy-toggle" data-target="allergy-detail-${i}" checked>
                         <label class="radio-btn" for="allergy-no-${i}">No</label>
 
@@ -64,7 +64,7 @@ if (guestCountSelect) {
                     </div>
                     
                     <div class="allergy-details" id="allergy-detail-${i}">
-                        <div class="input-group" style="margin-bottom: 15px;">
+                        <div class="input-group" style="margin-bottom: 5px;">
                             <i class="ph ph-warning-circle"></i>
                             <input type="text" name="alergia-tipo-${i}" placeholder="Especifique... (ej. Celíaco, Lactosa)">
                         </div>
@@ -109,7 +109,7 @@ if (guestCountSelect) {
             guestDiv.className = "guest-row fade-in";
             guestDiv.innerHTML = `
                 <h4>Lamentamos que no puedas venir</h4>
-                <p style="margin-bottom: 15px; font-size: 0.95rem;">Por favor, indícanos tu nombre o los nombres de las personas que no podréis asistir:</p>
+                <p style="margin-bottom: 5px; font-size: 0.95rem;">Por favor, indícanos tu nombre o los nombres de las personas que no podréis asistir:</p>
                 <div class="input-group" style="margin-bottom: 0;">
                     <i class="ph ph-user"></i>
                     <input type="text" name="nombres-no-asisten" placeholder="Nombres..." required>
@@ -238,7 +238,7 @@ if (rsvpForm) {
         } else {
             const count = parseInt(guestCount);
             let nombresArr = [];
-            for (let i = 1; i <= count; i++) {
+            for (let i = ; i <= count; i++) {
                 const nombre = formData.get(`nombre-${i}`) || "";
                 const menu = formData.get(`menu-${i}`) || "Adulto"; // En caso de que no lo lea
                 const tieneAlergia = formData.get(`has-allergy-${i}`) === "si";
@@ -283,7 +283,7 @@ if (rsvpForm) {
         // ==========================================
         // ⚠️ INSTRUCCIÓN: PEGAR AQUÍ LA URL DE TU GOOGLE SCRIPT ⚠️
         // ==========================================
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwaNl2tW2rvJfIWDRasLJ6qeywPFXokROdwseyD1EXqAdQQu44Nu6yjt9lUXNjQ3bQZ/exec";
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwaNl2tW2rvJfIWDRasLJ6qeywPFXokROdwseyDEXqAdQQu44Nu6yjt9lUXNjQ3bQZ/exec";
 
         if (GOOGLE_SCRIPT_URL === "URL_DE_TU_SCRIPT_AQUI" || GOOGLE_SCRIPT_URL === "") {
             setTimeout(() => {
@@ -294,7 +294,7 @@ if (rsvpForm) {
                     formMessage.style.color = "var(--primary)";
                     formMessage.innerHTML = "¡Atención! Funciona de prueba. Debes poner la URL de Google Sheets en el archivo script.js";
                 }
-            }, 1000);
+            }, 000);
             return;
         }
 
@@ -423,7 +423,7 @@ function saveSongSuggestion(song, from) {
     const extractSongFromText = (text) => {
         const regex = /Canc[ió]n\s*sugerida[:\-\s]*([^\n<]+)/i;
         const m = text.match(regex);
-        return m ? m[1].trim() : null;
+        return m ? m[].trim() : null;
     };
 
     const saveSongIfNew = (song, from = 'Panel') => {
@@ -541,7 +541,7 @@ if (document.readyState === "loading") {
 // ==========================================
 
 // ⚠️  CAMBIA AQUÍ LA CONTRASEÑA DE LAS ORGANIZADORAS
-const CONTRASENA_PRIVADA = "1";
+const CONTRASENA_PRIVADA = "Clm";
 
 const SHEET_ID = "16DtKzaFsKr0nDYEpj4bhYVYbneDlJ_dcZ096v-l0TEY";
 

@@ -541,7 +541,7 @@ if (document.readyState === "loading") {
 // ==========================================
 
 // ⚠️  CAMBIA AQUÍ LA CONTRASEÑA DE LAS ORGANIZADORAS
-const CONTRASENA_PRIVADA = "Clm";
+const CONTRASENA_PRIVADA = "1";
 
 const SHEET_ID = "16DtKzaFsKr0nDYEpj4bhYVYbneDlJ_dcZ096v-l0TEY";
 

@@ -8,7 +8,7 @@
   --primary-light: #833441;
   --secondary: #f0e6dd;
   --bg-color: #fdfaf7;
-  --bg-light: #ffffff;
+  --bg-light: #f5ede6;
   --text-dark: #3a3530;
   --text-light: #7a7066;
   --font-names: 'Great Vibes', cursive;
@@ -826,4 +826,839 @@ footer p {
   .rsvp-buttons {
     flex-direction: column;
   }
+}
+
+/* ==========================================================================
+   Área Privada – Botón en Footer
+   ========================================================================== */
+.btn-area-privada {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 8px 18px;
+  background: transparent;
+  border: 1px solid rgba(131, 52, 65, 0.25);
+  border-radius: 30px;
+  color: var(--text-light);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  opacity: 0.6;
+}
+
+.btn-area-privada:hover {
+  opacity: 1;
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-2px);
+}
+
+.btn-area-privada i {
+  font-size: 0.9rem;
+}
+
+/* ==========================================================================
+   Área Privada – Modal Glassmorphism
+   ========================================================================== */
+.modal-privado {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-privado.activo {
+  display: flex;
+}
+
+.modal-privado-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(30, 20, 20, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: pointer;
+}
+
+.modal-privado-box {
+  position: relative;
+  z-index: 1;
+  max-width: 420px;
+  width: 90%;
+  padding: 50px 40px 40px;
+  text-align: center;
+  animation: fadeIn 0.4s ease forwards;
+}
+
+/* Modal detalle más amplio (solo afecta al cuadro de detalles) */
+.modal-detalle-box {
+  position: relative;
+  z-index: 1;
+  max-width: 900px;
+  /* ampliado */
+  width: 95%;
+  padding: 40px;
+  text-align: left;
+  animation: fadeIn 0.4s ease forwards;
+}
+
+/* Layout específico para el contenido de detalle (cabecera + 3 columnas) */
+.detalle-body {
+  margin-top: 20px;
+}
+
+/* Nueva estructura de columnas dentro del body de detalle */
+.detalle-columns {
+  display: grid;
+  grid-template-columns: 0.35fr 0.3fr 2.35fr;
+  /* fecha | número | detalles (ajustado visualmente) */
+  gap: 18px;
+  align-items: start;
+}
+
+.detalle-column {
+  background: white;
+  padding: 18px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-sm);
+  min-height: 120px;
+  color: var(--text-dark);
+}
+
+.detalle-column.detalle-grande {
+  min-height: 180px;
+}
+
+/* Separación clara entre invitados en la columna de detalles */
+.detalle-guest {
+  margin-bottom: 28px;
+  padding: 14px;
+  border: 1px solid rgba(131, 52, 65, 0.1);
+  border-radius: 8px;
+  background: rgba(131, 52, 65, 0.03);
+}
+
+.detalle-guest:last-child {
+  margin-bottom: 0;
+}
+
+.detalle-guest strong {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--primary);
+  font-size: 1rem;
+  letter-spacing: 0.5px;
+}
+
+.detalle-other {
+  margin-bottom: 14px;
+}
+
+@media (max-width: 900px) {
+  .detalle-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.modal-privado-box h2 {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  color: var(--text-dark);
+  margin: 0 0 8px;
+}
+
+.modal-privado-box p {
+  color: var(--text-light);
+  font-size: 0.95rem;
+  margin-bottom: 28px;
+}
+
+.modal-privado-icon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 20px;
+  border-radius: 50%;
+  background: var(--secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-privado-icon i {
+  font-size: 2.2rem;
+  color: var(--primary);
+  animation: pulse 2.5s ease-in-out infinite;
+}
+
+.modal-privado-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: transparent;
+  border: none;
+  font-size: 1.3rem;
+  color: var(--text-light);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  transition: all 0.2s ease;
+}
+
+.modal-privado-close:hover {
+  background: rgba(131, 52, 65, 0.1);
+  color: var(--primary);
+}
+
+.modal-privado-input {
+  margin-bottom: 6px !important;
+}
+
+.modal-privado-input input {
+  width: 100%;
+  padding: 15px 16px 15px 45px;
+  border: 1px solid #e0dfdb;
+  border-radius: 12px;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  background: var(--bg-color);
+  color: var(--text-dark);
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.modal-privado-input input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(131, 52, 65, 0.12);
+  background: white;
+}
+
+.modal-error-msg {
+  color: #c0392b;
+  font-size: 0.88rem;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  animation: fadeIn 0.3s ease;
+}
+
+/* ==========================================================================
+   Área Privada – Panel Principal
+   ========================================================================== */
+.panel-privado {
+  animation: fadeIn 0.6s ease forwards;
+}
+
+.panel-privado-header {
+  margin-bottom: 40px;
+}
+
+.btn-cerrar-panel {
+  margin-top: 16px;
+  font-size: 0.85rem;
+  padding: 10px 22px;
+  cursor: pointer;
+}
+
+/* Stats resumen */
+.privado-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 12px;
+  max-width: 800px;
+  margin: 0 auto 40px;
+}
+
+.privado-stat-card {
+  background: white;
+  border-radius: var(--radius);
+  padding: 24px 10px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid rgba(131, 52, 65, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.3s ease;
+}
+
+.privado-stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-hover);
+}
+
+.privado-stat-num {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  /* ligeramente más pequeño para que detalles destaque */
+  font-weight: 600;
+  color: var(--primary);
+  line-height: 1;
+}
+
+.privado-stat-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-light);
+  text-align: center;
+}
+
+/* Canciones Recomendadas */
+.privado-canciones {
+  max-width: 800px;
+  margin: 0 auto 40px;
+  text-align: center;
+}
+
+.btn-toggle-canciones {
+  padding: 12px 24px;
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.lista-canciones {
+  list-style: none;
+  padding: 16px;
+  margin: 16px 0 0;
+  background: transparent;
+  border-radius: var(--radius);
+  max-height: 500px;
+  overflow-y: auto;
+  text-align: left;
+  animation: fadeIn 0.3s ease forwards;
+  display: grid;
+  gap: 12px;
+}
+
+.lista-canciones li {
+  padding: 16px;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid rgba(131, 52, 65, 0.12);
+  box-shadow: var(--shadow-sm);
+  font-size: 0.95rem;
+  color: var(--text-dark);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  transition: all 0.3s ease;
+}
+
+.lista-canciones li:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(131, 52, 65, 0.25);
+}
+
+.lista-canciones li i {
+  color: var(--primary);
+  margin-top: 3px;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.lista-canciones li div {
+  flex: 1;
+}
+
+.lista-canciones li strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--primary);
+  font-size: 1rem;
+}
+
+.lista-canciones li small {
+  display: block;
+  color: var(--text-light);
+  font-size: 0.85rem;
+}
+
+/* Grid de tarjetas de reservas */
+.privado-cards {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+/* Tarjeta individual de reserva */
+.reserva-card {
+  text-align: left;
+  padding: 28px 24px;
+}
+
+.reserva-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 20px;
+  margin-bottom: 14px;
+}
+
+.reserva-card-badge.asiste {
+  background: rgba(39, 174, 96, 0.12);
+  color: #27ae60;
+}
+
+.reserva-card-badge.no-asiste {
+  background: rgba(231, 76, 60, 0.1);
+  color: #e74c3c;
+}
+
+.reserva-card h3 {
+  font-size: 1.2rem;
+  margin: 0 0 12px;
+  color: var(--text-dark);
+}
+
+.reserva-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reserva-card-info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--text-light);
+}
+
+.reserva-card-info-item i {
+  font-size: 1rem;
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.reserva-card-info-item strong {
+  color: var(--text-dark);
+}
+
+.reserva-card-detalles {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 0.85rem;
+  color: var(--text-light);
+  white-space: pre-line;
+  line-height: 1.7;
+}
+
+/* Spinner de carga */
+.privado-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 40px 0;
+  color: var(--text-light);
+  font-size: 0.95rem;
+}
+
+.privado-spinner {
+  width: 44px;
+  height: 44px;
+  border: 3px solid rgba(131, 52, 65, 0.15);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.privado-error-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px;
+  color: #c0392b;
+  font-size: 2.5rem;
+}
+
+.privado-error-msg p {
+  font-size: 1rem;
+  color: var(--text-light);
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .modal-privado-box {
+    padding: 40px 24px 32px;
+  }
+
+  .privado-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .privado-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   Modal de Detalle de Reserva
+   ========================================================================== */
+
+/* Caja más ancha para leer mejor */
+.modal-detalle-box {
+  position: relative;
+  z-index: 1;
+  max-width: 900px;
+  width: 94%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+  animation: fadeIn 0.35s ease forwards;
+}
+
+/* Cabecera del detalle */
+.detalle-header {
+  padding: 32px 36px 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+}
+
+.detalle-header h2 {
+  font-family: var(--font-heading);
+  font-size: 1.8rem;
+  color: var(--text-dark);
+  margin: 12px 0 6px;
+}
+
+.detalle-header .reserva-card-badge {
+  font-size: 0.8rem;
+  padding: 5px 14px;
+}
+
+/* Cuerpo scrollable */
+.detalle-body {
+  overflow-y: auto;
+  padding: 24px 36px 36px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* Sections */
+.detalle-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.detalle-section-title {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  color: var(--primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 2px solid rgba(131, 52, 65, 0.1);
+  padding-bottom: 10px;
+}
+
+.detalle-section-title i {
+  font-size: 1.4rem;
+}
+
+/* Lista de invitados - Cards */
+.detalle-guests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.detalle-guest-card {
+  background: white;
+  border-top: 4px solid var(--primary);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+  transition: all 0.3s ease;
+  margin-bottom: 16px;
+}
+
+.detalle-guest-card:hover {
+  box-shadow: 0 8px 25px rgba(131, 52, 65, 0.1);
+  transform: translateY(-3px);
+  border-top-color: #AD004F;
+}
+
+.guest-name-large {
+  font-family: var(--font-heading);
+  font-size: 1.55rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin-bottom: 16px;
+  width: 100%;
+}
+
+.guest-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.guest-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 50px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+}
+
+/* Menú Adulto/Niño */
+.badge-menu.adulto {
+  background: #fdfaf7;
+  color: #833441;
+  border: 1px solid rgba(131, 52, 65, 0.2);
+}
+.badge-menu.nino {
+  background: #fff8f0;
+  color: #d35400;
+  border: 1px solid rgba(211, 84, 0, 0.2);
+}
+
+/* Alergias */
+.badge-alergia {
+  background: #fff5f5;
+  color: #c0392b;
+  border: 1px solid rgba(192, 57, 43, 0.2);
+}
+.badge-ok {
+  background: #f2fcf5;
+  color: #27ae60;
+  border: 1px solid rgba(39, 174, 96, 0.2);
+}
+
+/* Bus */
+.badge-bus {
+  background: #f4f8fc;
+  color: #2980b9;
+  border: 1px solid rgba(41, 128, 185, 0.2);
+}
+.badge-nobus {
+  background: #f9f9f9;
+  color: #7f8c8d;
+  border: 1px solid rgba(127, 140, 141, 0.2);
+}
+
+.guest-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  background: var(--bg-color);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.guest-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.guest-detail-item .label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-light);
+}
+
+.guest-detail-item .value {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-dark);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.guest-detail-item .value i {
+  font-size: 1.1rem;
+  color: var(--primary);
+}
+
+/* Alergia highlight */
+.guest-detail-item.has-allergy .value {
+  color: #c0392b;
+}
+
+.guest-detail-item.has-allergy .value i {
+  color: #e74c3c;
+}
+
+/* Grid de campos clave–valor (Información Extra) */
+.detalle-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.detalle-field {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+  transition: all 0.3s ease;
+}
+
+.detalle-field:hover {
+  border-color: rgba(131, 52, 65, 0.2);
+  background: rgba(131, 52, 65, 0.02);
+}
+
+.detalle-field-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-light);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detalle-field-label i {
+  font-size: 1.1rem;
+  color: var(--primary);
+}
+
+.detalle-field-value {
+  font-size: 1.05rem;
+  color: var(--text-dark);
+  font-weight: 500;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+/* Tarjetas con cursor pointer al tener detalle */
+.reserva-card.clickable {
+  cursor: pointer;
+  position: relative;
+}
+
+.reserva-card.clickable::after {
+  content: "Ver detalle";
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--primary);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reserva-card.clickable:hover::after {
+  opacity: 1;
+}
+
+@media (max-width: 768px) {
+  .modal-detalle-box {
+    max-width: 100%;
+    width: 95%;
+    max-height: 92vh;
+  }
+
+  .detalle-header,
+  .detalle-body {
+    padding: 20px;
+  }
+
+  .detalle-fields {
+    grid-template-columns: 1fr;
+  }
+  
+  .guest-details-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+/* ==========================================================================
+   Animación de entrada escalonada para tarjetas del modal de detalle
+   ========================================================================== */
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.detalle-guest-card.fade-in,
+.detalle-field.fade-in {
+  opacity: 0;
+  animation: slideUpFade 0.4s ease forwards;
+}
+
+/* UI Mejorada: Nombres y Header Cards Modal */
+.reserva-card-nombres, .detalle-header-names {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0 16px 0;
+}
+
+.main-name-item {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text-dark);
+}
+
+.main-name-item.extra-names {
+  color: var(--primary);
+  font-size: 1.15rem;
+  font-style: italic;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+/* Separador vertical entre secciones del modal */
+.detalle-section + .detalle-section {
+  padding-top: 8px;
+  border-top: 1px solid rgba(131, 52, 65, 0.08);
 }

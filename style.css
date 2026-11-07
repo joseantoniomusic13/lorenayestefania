@@ -2600,6 +2600,37 @@ footer p {
 }
 
 @media (max-width: 768px) {
+  #rsvp {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  #rsvp .section-title,
+  #rsvp .section-subtitle {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  #rsvp-form {
+    width: 100%;
+    max-width: 100%;
+    padding: 24px 16px;
+    border-radius: 16px;
+  }
+
+  #rsvp-form .guest-row {
+    padding: 18px 14px;
+    border-radius: 12px;
+  }
+
+  #rsvp-form .radio-group {
+    gap: 10px;
+  }
+
+  #rsvp-form .radio-btn {
+    padding: 12px;
+  }
+
   .dress-code-cards {
     grid-template-columns: 1fr;
     gap: 20px;

@@ -2591,3 +2591,1045 @@ footer p {
     width: 100%;
   }
 }
+
+/* ==========================================================================
+   Pestañas de Vistas y Organizador Visual de Mesas (Wedding Manager)
+   ========================================================================== */
+.app-view-tabs-bar {
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0 28px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+  flex-shrink: 0;
+}
+
+.app-view-tabs {
+  max-width: 1340px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.app-view-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 15px 20px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.app-view-tab i {
+  font-size: 1.2rem;
+}
+
+.app-view-tab:hover {
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+.app-view-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 700;
+}
+
+.app-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.app-view-tab.active .app-tab-badge {
+  background: #fdf2f4;
+  color: var(--primary);
+}
+
+.app-tab-badge.badge-pending {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.app-tab-badge.badge-all-ok {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.app-view-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+}
+
+/* Selector individual de mesa por cada invitado en Modal Manual / Edición */
+.manual-guest-mesa-box {
+  background: #fffdf9;
+  border: 1px solid #f3e8d2;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.manual-guest-mesa-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.manual-guest-mesa-header label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #7c2d12;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-copy-mesa-all {
+  border: 1px solid rgba(131, 52, 65, 0.25);
+  background: white;
+  color: var(--primary);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.btn-copy-mesa-all:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.manual-guest-mesa-custom {
+  margin-top: 8px;
+  display: none;
+}
+
+.manual-guest-mesa-custom.visible {
+  display: block;
+}
+
+.app-org-hint {
+  font-size: 0.83rem;
+  color: #78350f;
+  margin: 0 0 12px;
+  line-height: 1.45;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.app-org-hint i {
+  font-size: 1rem;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+/* Mini-tags de mesa individual en tarjetas y detalle */
+.mini-tag.tag-mesa {
+  background: #fdf2f4;
+  color: #833441;
+  border: 1px solid rgba(131, 52, 65, 0.22);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mini-tag.tag-sin-mesa {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px dashed #fcd34d;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.guest-badge.badge-mesa {
+  background: #fdf2f4;
+  color: #833441;
+  border: 1px solid rgba(131, 52, 65, 0.2);
+}
+
+.guest-badge.badge-sin-mesa {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px dashed #fcd34d;
+}
+
+/* KPIs de la Vista de Mesas */
+.mesas-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+}
+
+.mesas-kpi-grid .app-kpi-card {
+  cursor: pointer;
+}
+
+.kpi-mesas-total .app-kpi-icon {
+  background: #fdf2f4;
+  color: #833441;
+}
+
+.kpi-mesas-confirmados .app-kpi-icon {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.kpi-mesas-pendientes .app-kpi-icon {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.kpi-mesas-bajas .app-kpi-icon {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.kpi-mesas-sin-asignar .app-kpi-icon {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+/* Panel "¿Quién falta por asignarse en mesa?" */
+.pendientes-mesa-panel {
+  background: white;
+  border-radius: 18px;
+  border: 1px solid #fde68a;
+  box-shadow: 0 4px 16px rgba(217, 119, 6, 0.06);
+  overflow: hidden;
+}
+
+.pendientes-mesa-panel.all-assigned {
+  border-color: #a7f3d0;
+  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.05);
+}
+
+.pendientes-mesa-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 22px;
+  background: linear-gradient(90deg, #fffbeb 0%, #ffffff 100%);
+  border-bottom: 1px solid #fef3c7;
+  flex-wrap: wrap;
+}
+
+.pendientes-mesa-panel.all-assigned .pendientes-mesa-header {
+  background: linear-gradient(90deg, #ecfdf5 0%, #ffffff 100%);
+  border-bottom-color: #d1fae5;
+}
+
+.pendientes-mesa-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.pendientes-mesa-title > i {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #fef3c7;
+  color: #b45309;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  flex-shrink: 0;
+}
+
+.pendientes-mesa-panel.all-assigned .pendientes-mesa-title > i {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.pendientes-mesa-title h3 {
+  font-family: var(--font-body);
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.pendientes-mesa-title p {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 2px 0 0;
+}
+
+.pendientes-count-pill {
+  background: #d97706;
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 3px 11px;
+  border-radius: 20px;
+}
+
+.pendientes-mesa-panel.all-assigned .pendientes-count-pill {
+  background: #059669;
+}
+
+.pendientes-mesa-grid {
+  padding: 18px 22px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 12px;
+  max-height: 330px;
+  overflow-y: auto;
+}
+
+.pendientes-empty-ok {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 12px;
+  color: #047857;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.pendiente-guest-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #f59e0b;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  text-align: left;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pendiente-guest-card:hover {
+  border-color: #cbd5e1;
+  border-left-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+}
+
+.pendiente-guest-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pendiente-guest-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.pendiente-guest-group {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.pendiente-guest-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pendiente-assign-select {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: white;
+  color: #1e293b;
+  cursor: pointer;
+}
+
+.pendiente-assign-select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* Barra de herramientas de Mesas y Leyenda */
+.mesas-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mesas-toolbar-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.mesas-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legend-dot.dot-confirmado {
+  background: #10b981;
+}
+
+.legend-dot.dot-pendiente {
+  background: #f59e0b;
+}
+
+.legend-dot.dot-baja {
+  background: #ef4444;
+}
+
+.legend-dot.dot-libre {
+  background: #e2e8f0;
+  border: 1.5px dashed #94a3b8;
+}
+
+/* Grid Visual de Tarjetas de Mesa */
+.mesas-visual-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(390px, 1fr));
+  gap: 22px;
+  align-items: start;
+}
+
+.mesa-visual-card {
+  background: white;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  border-top: 4px solid var(--primary);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+  transition: box-shadow 0.22s ease, transform 0.22s ease;
+}
+
+.mesa-visual-card.mesa-completa {
+  border-top-color: #10b981;
+}
+
+.mesa-visual-card.mesa-exceso {
+  border-top-color: #dc2626;
+}
+
+.mesa-visual-card:hover {
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.mesa-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mesa-title-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mesa-order-badge {
+  background: #1e293b;
+  color: white;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.mesa-card-title {
+  font-family: var(--font-heading);
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.mesa-card-note {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mesa-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.mesa-icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: all 0.18s ease;
+}
+
+.mesa-icon-btn:hover:not(:disabled) {
+  background: #1e293b;
+  color: white;
+  border-color: #1e293b;
+}
+
+.mesa-icon-btn.danger:hover:not(:disabled) {
+  background: #dc2626;
+  color: white;
+  border-color: #dc2626;
+}
+
+.mesa-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Croquis / Representación Visual de la Mesa y sus Sillas */
+.mesa-croquis-box {
+  background: radial-gradient(circle at center, #fcfaf7 0%, #f8fafc 100%);
+  border: 1px solid #f1f5f9;
+  border-radius: 16px;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.croquis-stage.is-redonda {
+  position: relative;
+  width: 214px;
+  height: 214px;
+  margin: 0 auto;
+}
+
+.croquis-stage.is-redonda .croquis-table-surface {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 106px;
+  height: 106px;
+  border-radius: 50%;
+  background: white;
+  border: 3px solid rgba(131, 52, 65, 0.25);
+  box-shadow: 0 6px 18px rgba(131, 52, 65, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 6px;
+}
+
+.croquis-stage.is-redonda .croquis-chair {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.croquis-stage.is-imperial {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 4px;
+}
+
+.croquis-imperial-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.croquis-stage.is-imperial .croquis-table-surface {
+  width: min(88%, 270px);
+  min-height: 62px;
+  border-radius: 14px;
+  background: white;
+  border: 3px solid rgba(131, 52, 65, 0.25);
+  box-shadow: 0 6px 18px rgba(131, 52, 65, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+}
+
+.croquis-surface-nums {
+  font-family: var(--font-body);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.croquis-surface-sub {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.croquis-chair {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-family: var(--font-body);
+  font-size: 0.68rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.18s ease;
+  user-select: none;
+}
+
+.croquis-chair:hover {
+  transform: translate(-50%, -50%) scale(1.14);
+  z-index: 4;
+}
+
+.croquis-stage.is-imperial .croquis-chair:hover {
+  transform: scale(1.14);
+}
+
+.croquis-chair.chair-confirmado {
+  background: #10b981;
+  color: white;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
+}
+
+.croquis-chair.chair-pendiente {
+  background: #f59e0b;
+  color: white;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.32);
+}
+
+.croquis-chair.chair-libre {
+  background: white;
+  color: #94a3b8;
+  border: 1.5px dashed #cbd5e1;
+}
+
+.croquis-chair.chair-exceso {
+  outline: 2px solid #dc2626;
+  outline-offset: 1px;
+}
+
+/* Barra de Progreso y Resumen de Ocupación de la Mesa */
+.mesa-occupancy-summary {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.mesa-progress-track {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+}
+
+.mesa-progress-seg.seg-confirmado {
+  background: #10b981;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.mesa-progress-seg.seg-pendiente {
+  background: #fbbf24;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.mesa-mini-counters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.mesa-cap-pill {
+  font-size: 0.73rem;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 20px;
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.mesa-cap-pill.is-full {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.mesa-cap-pill.is-over {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+/* Lista de asientos y estados dentro de cada mesa */
+.mesa-seats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.mesa-seats-empty {
+  font-size: 0.83rem;
+  color: #94a3b8;
+  text-align: center;
+  padding: 14px 10px;
+  border: 1px dashed #e2e8f0;
+  border-radius: 10px;
+}
+
+.seat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-wrap: wrap;
+}
+
+.seat-row.is-confirmado {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.seat-row.is-pendiente {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.seat-row.is-no-asiste {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.seat-main-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.seat-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.08);
+  color: #334155;
+  flex-shrink: 0;
+}
+
+.seat-row.is-confirmado .seat-num {
+  background: #10b981;
+  color: white;
+}
+
+.seat-row.is-pendiente .seat-num {
+  background: #f59e0b;
+  color: white;
+}
+
+.seat-row.is-no-asiste .seat-num {
+  background: #ef4444;
+  color: white;
+}
+
+.seat-person-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.seat-person-name {
+  font-size: 0.87rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+.seat-row.is-no-asiste .seat-person-name {
+  text-decoration: line-through;
+  color: #991b1b;
+}
+
+.seat-person-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: #475569;
+  margin-top: 2px;
+}
+
+.seat-right-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Etiquetas oficiales de estado en Mesa: Confirmado / FALTA POR CONFIRMAR / NO ASISTE */
+.seat-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.35px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.seat-status-pill.confirmado {
+  background: #059669;
+  color: white;
+}
+
+.seat-status-pill.pendiente {
+  background: #d97706;
+  color: white;
+}
+
+.seat-status-pill.no-asiste {
+  background: #dc2626;
+  color: white;
+}
+
+.seat-move-select {
+  max-width: 122px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+
+.seat-mini-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: white;
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.18s ease;
+}
+
+.seat-mini-btn:hover {
+  background: #1e293b;
+  color: white;
+}
+
+.seat-mini-btn.confirm-quick {
+  color: #059669;
+  border-color: #a7f3d0;
+}
+
+.seat-mini-btn.confirm-quick:hover {
+  background: #059669;
+  color: white;
+}
+
+.seat-mini-btn.remove-seat:hover {
+  background: #dc2626;
+  color: white;
+  border-color: #dc2626;
+}
+
+/* Formulario rápido para añadir invitados previstos dentro de cada mesa */
+.mesa-add-member-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+  margin-top: auto;
+}
+
+.mesa-add-member-input {
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 0.83rem;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.mesa-add-member-input:focus {
+  outline: none;
+  background: white;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(131, 52, 65, 0.1);
+}
+
+.mesa-form-two-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.mesas-empty-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+@media (max-width: 1100px) {
+  .mesas-kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .app-view-tabs-bar {
+    padding: 0 12px;
+  }
+
+  .app-view-tab {
+    padding: 13px 14px;
+    font-size: 0.85rem;
+  }
+
+  .mesas-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .mesas-visual-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pendientes-mesa-grid {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .mesa-form-two-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .seat-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .seat-right-controls {
+    justify-content: flex-end;
+  }
+}

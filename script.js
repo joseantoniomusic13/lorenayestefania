@@ -7,6 +7,7 @@ import {
     getFirestore,
     collection,
     addDoc,
+    getDoc,
     getDocs,
     doc,
     updateDoc,
@@ -69,6 +70,7 @@ async function obtenerFirestore() {
         try {
             let firebaseConfig = null;
             let reservasCollection = "reservas";
+            let mesasCollection = "mesas";
 
             const res = await fetch("/api/config");
             const contentType = res.headers.get("content-type") || "";
@@ -77,6 +79,7 @@ async function obtenerFirestore() {
                 const data = await res.json();
                 firebaseConfig = data.firebaseConfig;
                 reservasCollection = data.reservasCollection || "reservas";
+                mesasCollection = data.mesasCollection || "mesas";
             } else if (esEntornoLocal()) {
                 const localEnv = await cargarEnvLocalFallback();
                 if (localEnv && localEnv.FIREBASE_API_KEY) {
@@ -90,6 +93,7 @@ async function obtenerFirestore() {
                         measurementId: localEnv.FIREBASE_MEASUREMENT_ID || ""
                     };
                     reservasCollection = localEnv.FIREBASE_COLLECTION || "reservas";
+                    mesasCollection = localEnv.FIREBASE_MESAS_COLLECTION || "mesas";
                 }
             }
 
@@ -105,7 +109,7 @@ async function obtenerFirestore() {
             }
 
             const db = getFirestore(app);
-            firestoreInstance = { db, reservasCollection };
+            firestoreInstance = { db, reservasCollection, mesasCollection };
             return firestoreInstance;
         } catch (err) {
             firestoreInitPromise = null;
@@ -308,6 +312,61 @@ if (mobileMenu && navMenu) {
 // 3. GENERADOR DINÁMICO DE CAMPOS DE INVITADOS (Público y Manual/CRUD)
 // ==========================================================================
 
+let todasLasMesas = [];
+let distribucionActual = null;
+
+/**
+ * Devuelve la lista ordenada de mesas disponibles para los selectores individuales,
+ * respetando el orden definido por las novias e incluyendo cualquier mesa adicional existente.
+ */
+function obtenerOpcionesMesasSelector(mesaActual = "") {
+    const vistas = new Map();
+
+    // 1. Mesas creadas en el Organizador de Mesas (ordenadas por su orden)
+    todasLasMesas.forEach((m, idx) => {
+        const clave = normalizarNombrePersona(m.nombre);
+        if (clave && !vistas.has(clave)) {
+            const mesaCalc = distribucionActual && distribucionActual.mesasPorId
+                ? distribucionActual.mesasPorId.get(m.id)
+                : null;
+            const infoPlazas = mesaCalc
+                ? ` (${mesaCalc.ocupadosActivos}/${m.capacidad})`
+                : ` (${m.capacidad} plazas)`;
+            vistas.set(clave, {
+                valor: m.nombre,
+                etiqueta: `${idx + 1}. ${m.nombre}${infoPlazas}`
+            });
+        }
+    });
+
+    // 2. Cualquier mesa en uso en reservas aún no dada de alta formalmente
+    if (distribucionActual && Array.isArray(distribucionActual.mesas)) {
+        distribucionActual.mesas.forEach(m => {
+            const clave = normalizarNombrePersona(m.nombre);
+            if (clave && !vistas.has(clave)) {
+                vistas.set(clave, {
+                    valor: m.nombre,
+                    etiqueta: `${m.nombre} (${m.ocupadosActivos} asig.)`
+                });
+            }
+        });
+    }
+
+    // 3. Garantizar que el valor actual del invitado nunca se pierda
+    const actualLimpia = String(mesaActual || "").trim();
+    if (actualLimpia && actualLimpia !== "__NUEVA_MESA__") {
+        const claveAct = normalizarNombrePersona(actualLimpia);
+        if (claveAct && !vistas.has(claveAct)) {
+            vistas.set(claveAct, {
+                valor: actualLimpia,
+                etiqueta: actualLimpia
+            });
+        }
+    }
+
+    return Array.from(vistas.values());
+}
+
 /**
  * Genera dinámicamente los campos de asistentes dentro de un contenedor.
  * @param {HTMLElement} container - Contenedor donde insertar las filas
@@ -315,8 +374,16 @@ if (mobileMenu && navMenu) {
  * @param {string} prefix - Prefijo para evitar colisión de IDs ('public' o 'manual')
  * @param {Array} valoresPrevios - Datos previos para pre-rellenar al editar o cambiar número
  * @param {string} nombresNoAsistenPrevio - Valor previo si count === 0
+ * @param {string} mesaNoAsistePrevio - Mesa previa opcional cuando count === 0 en modo manual
  */
-function renderizarFilasInvitados(container, count, prefix = "public", valoresPrevios = [], nombresNoAsistenPrevio = "") {
+function renderizarFilasInvitados(
+    container,
+    count,
+    prefix = "public",
+    valoresPrevios = [],
+    nombresNoAsistenPrevio = "",
+    mesaNoAsistePrevio = ""
+) {
     if (!container) return;
     container.innerHTML = "";
 
@@ -332,6 +399,52 @@ function renderizarFilasInvitados(container, count, prefix = "public", valoresPr
             const alergiaVal = tieneAlergia && prev.alergia && prev.alergia !== "Ninguna" ? prev.alergia : "";
             const busVal = (prev.bus || "si").toLowerCase().startsWith("n") ? "no" : "si";
 
+            const esNuevaMesaCustom = prev.mesaSelect === "__NUEVA_MESA__";
+            const mesaActualVal = esNuevaMesaCustom ? "" : String(prev.mesa || "").trim();
+            const mesaCustomVal = esNuevaMesaCustom ? String(prev.mesaCustom || prev.mesa || "").trim() : "";
+
+            let bloqueMesaIndividualHtml = "";
+            if (isManual) {
+                const opcionesMesas = obtenerOpcionesMesasSelector(mesaActualVal);
+                const normActual = normalizarNombrePersona(mesaActualVal);
+
+                const optionsHtml = opcionesMesas.map(opt => {
+                    const selected = !esNuevaMesaCustom && normActual && normalizarNombrePersona(opt.valor) === normActual
+                        ? "selected"
+                        : "";
+                    return `<option value="${escaparAtributo(opt.valor)}" ${selected}>🪑 ${escaparHTML(opt.etiqueta)}</option>`;
+                }).join("");
+
+                bloqueMesaIndividualHtml = `
+                    <div class="manual-guest-mesa-box">
+                        <div class="manual-guest-mesa-header">
+                            <label for="manual-mesa-select-${i}">
+                                <i class="ph ph-armchair"></i> Mesa asignada a este invitado
+                            </label>
+                            ${i === 1 && count > 1 ? `
+                                <button type="button" class="btn-copy-mesa-all" data-copy-mesa-from="1" title="Copiar esta misma mesa al resto de personas de esta reserva">
+                                    <i class="ph ph-copy"></i> Aplicar al resto
+                                </button>
+                            ` : ""}
+                        </div>
+                        <div class="input-group" style="margin-bottom: 0;">
+                            <i class="ph ph-armchair"></i>
+                            <select name="manual-mesa-select-${i}" id="manual-mesa-select-${i}" class="manual-mesa-select" data-custom-target="manual-mesa-custom-wrap-${i}">
+                                <option value="">— Sin mesa asignada (pendiente) —</option>
+                                ${optionsHtml}
+                                <option value="__NUEVA_MESA__" ${esNuevaMesaCustom ? "selected" : ""}>➕ Crear / escribir nueva mesa...</option>
+                            </select>
+                        </div>
+                        <div class="manual-guest-mesa-custom ${esNuevaMesaCustom ? "visible" : ""}" id="manual-mesa-custom-wrap-${i}">
+                            <div class="input-group" style="margin-bottom: 0;">
+                                <i class="ph ph-plus-circle"></i>
+                                <input type="text" name="manual-mesa-custom-${i}" placeholder="Nombre de la nueva mesa (ej: Mesa 6 - Amigos)..." value="${escaparAtributo(mesaCustomVal)}" ${esNuevaMesaCustom ? 'required="true"' : ""}>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
             const guestDiv = document.createElement("div");
             guestDiv.className = "guest-row fade-in";
 
@@ -341,6 +454,8 @@ function renderizarFilasInvitados(container, count, prefix = "public", valoresPr
                     <i class="ph ph-user"></i>
                     <input type="text" name="${namePrefix}nombre-${i}" placeholder="Nombre y apellidos" value="${escaparAtributo(nombreVal)}" required>
                 </div>
+
+                ${bloqueMesaIndividualHtml}
                 
                 <p style="margin-bottom: 5px; font-weight: 500; font-size: 0.95rem;">Menú</p>
                 <div class="radio-group">
@@ -403,7 +518,84 @@ function renderizarFilasInvitados(container, count, prefix = "public", valoresPr
                 }
             });
         });
+
+        // Activar listeners de selector individual de mesa (modo manual / organizadoras)
+        if (isManual) {
+            container.querySelectorAll(".manual-mesa-select").forEach(sel => {
+                sel.addEventListener("change", function () {
+                    const targetId = this.getAttribute("data-custom-target");
+                    const wrap = document.getElementById(targetId);
+                    if (!wrap) return;
+                    const inp = wrap.querySelector("input");
+                    if (this.value === "__NUEVA_MESA__") {
+                        wrap.classList.add("visible");
+                        if (inp) {
+                            inp.setAttribute("required", "true");
+                            inp.focus();
+                        }
+                    } else {
+                        wrap.classList.remove("visible");
+                        if (inp) {
+                            inp.removeAttribute("required");
+                            inp.value = "";
+                        }
+                    }
+                });
+            });
+
+            const btnCopyAll = container.querySelector(".btn-copy-mesa-all");
+            if (btnCopyAll) {
+                btnCopyAll.addEventListener("click", function () {
+                    const firstSelect = container.querySelector('[name="manual-mesa-select-1"]');
+                    const firstCustom = container.querySelector('[name="manual-mesa-custom-1"]');
+                    if (!firstSelect) return;
+                    const val = firstSelect.value;
+                    const customVal = firstCustom ? firstCustom.value : "";
+
+                    container.querySelectorAll(".manual-mesa-select").forEach((sel, idx) => {
+                        if (idx === 0) return;
+                        sel.value = val;
+                        sel.dispatchEvent(new Event("change"));
+                        if (val === "__NUEVA_MESA__") {
+                            const customInp = container.querySelector(`[name="manual-mesa-custom-${idx + 1}"]`);
+                            if (customInp) customInp.value = customVal;
+                        }
+                    });
+                    mostrarToast("Mesa aplicada a todos los miembros de esta reserva", "info");
+                });
+            }
+        }
     } else if (count === 0) {
+        let selectorMesaNoAsisteHtml = "";
+        if (isManual) {
+            const opcionesMesas = obtenerOpcionesMesasSelector(mesaNoAsistePrevio);
+            const normPrev = normalizarNombrePersona(mesaNoAsistePrevio);
+            const opts = opcionesMesas.map(opt => {
+                const selected = normPrev && normalizarNombrePersona(opt.valor) === normPrev ? "selected" : "";
+                return `<option value="${escaparAtributo(opt.valor)}" ${selected}>🪑 ${escaparHTML(opt.etiqueta)}</option>`;
+            }).join("");
+
+            selectorMesaNoAsisteHtml = `
+                <div class="manual-guest-mesa-box" style="margin-top: 14px; margin-bottom: 0;">
+                    <div class="manual-guest-mesa-header">
+                        <label for="manual-mesa-no-asiste">
+                            <i class="ph ph-armchair"></i> Mesa en la que estaban previstos (Opcional)
+                        </label>
+                    </div>
+                    <p style="font-size: 0.78rem; color: #78350f; margin: 0 0 8px;">
+                        Si tenían sitio previsto en una mesa, aparecerán marcados como <strong>NO ASISTE</strong> en esa mesa.
+                    </p>
+                    <div class="input-group" style="margin-bottom: 0;">
+                        <i class="ph ph-armchair"></i>
+                        <select name="manual-mesa-no-asiste" id="manual-mesa-no-asiste">
+                            <option value="">— Ninguna mesa específica —</option>
+                            ${opts}
+                        </select>
+                    </div>
+                </div>
+            `;
+        }
+
         const guestDiv = document.createElement("div");
         guestDiv.className = "guest-row fade-in";
         guestDiv.innerHTML = `
@@ -413,6 +605,7 @@ function renderizarFilasInvitados(container, count, prefix = "public", valoresPr
                 <i class="ph ph-user"></i>
                 <input type="text" name="${namePrefix}nombres-no-asisten" placeholder="Nombres y apellidos..." value="${escaparAtributo(nombresNoAsistenPrevio)}" required>
             </div>
+            ${selectorMesaNoAsisteHtml}
         `;
         container.appendChild(guestDiv);
     }
@@ -454,9 +647,26 @@ if (guestCountSelect) {
 }
 
 /**
+ * Calcula un resumen legible de las mesas de los invitados de una reserva (p. ej. "Mesa 1, Mesa 3").
+ */
+function resumirMesasDeInvitados(invitados = []) {
+    const unicas = [];
+    const vistas = new Set();
+    invitados.forEach(inv => {
+        const m = String(inv && inv.mesa ? inv.mesa : "").trim();
+        const norm = normalizarNombrePersona(m);
+        if (m && !vistas.has(norm)) {
+            vistas.add(norm);
+            unicas.push(m);
+        }
+    });
+    return unicas.join(", ");
+}
+
+/**
  * Extrae los datos de un formulario (público o manual) y construye el objeto estructurado para Firestore y Google Sheets.
  */
-function construirDatosReserva(formElement, countVal, prefix = "public", origen = "web") {
+function construirDatosReserva(formElement, countVal, prefix = "public", origen = "web", opcionesExtra = {}) {
     const formData = new FormData(formElement);
     const isManual = prefix === "manual";
     const namePrefix = isManual ? "manual-" : "";
@@ -473,10 +683,31 @@ function construirDatosReserva(formElement, countVal, prefix = "public", origen 
     let nombres = "";
     let detallesLineas = [];
     let invitados = [];
+    let mesaResumenManual = "";
+    let noAsistenMesas = [];
 
     if (count === 0) {
         nombres = (formData.get(`${namePrefix}nombres-no-asisten`) || "").trim();
         detallesLineas.push("No asisten");
+
+        if (isManual) {
+            const mesaNoAsisteSel = (formData.get("manual-mesa-no-asiste") || "").trim();
+            if (mesaNoAsisteSel) {
+                const mesaDoc = todasLasMesas.find(
+                    m => normalizarNombrePersona(m.nombre) === normalizarNombrePersona(mesaNoAsisteSel)
+                );
+                mesaResumenManual = mesaNoAsisteSel;
+                const partesNombres = dividirNombresPersonas(nombres);
+                noAsistenMesas = (partesNombres.length > 0 ? partesNombres : [nombres]).filter(Boolean).map(nom => ({
+                    nombre: nom,
+                    mesa: mesaNoAsisteSel,
+                    mesaId: mesaDoc ? mesaDoc.id : ""
+                }));
+            } else if (Array.isArray(opcionesExtra.noAsistenMesasPrevias) && opcionesExtra.noAsistenMesasPrevias.length > 0) {
+                noAsistenMesas = opcionesExtra.noAsistenMesasPrevias;
+                mesaResumenManual = resumirMesasDeInvitados(noAsistenMesas);
+            }
+        }
     } else {
         let nombresArr = [];
         for (let i = 1; i <= count; i++) {
@@ -488,18 +719,40 @@ function construirDatosReserva(formElement, countVal, prefix = "public", origen 
             const busRaw = formData.get(`${namePrefix}bus-${i}`) || "si";
             const busTexto = busRaw === "si" ? "Sí" : "No";
 
-            nombresArr.push(nombre);
-            invitados.push({
+            const invObj = {
                 nombre,
                 menu,
                 tieneAlergia: Boolean(tieneAlergia && alergiaRaw),
                 alergia,
                 bus: busRaw === "si" ? "si" : "no"
-            });
+            };
 
-            detallesLineas.push(`Invitado ${i}: ${nombre} | Menú: ${menu} | Alergias: ${alergia} | Autobús: ${busTexto}`);
+            let lineaDetalle = `Invitado ${i}: ${nombre} | Menú: ${menu} | Alergias: ${alergia} | Autobús: ${busTexto}`;
+
+            if (isManual) {
+                const selVal = (formData.get(`manual-mesa-select-${i}`) || "").trim();
+                const customVal = (formData.get(`manual-mesa-custom-${i}`) || "").trim();
+                const mesaInvitado = selVal === "__NUEVA_MESA__" ? customVal : selVal;
+                const mesaExistente = mesaInvitado
+                    ? todasLasMesas.find(m => normalizarNombrePersona(m.nombre) === normalizarNombrePersona(mesaInvitado))
+                    : null;
+
+                invObj.mesa = mesaInvitado;
+                invObj.mesaId = mesaExistente ? mesaExistente.id : "";
+
+                if (mesaInvitado) {
+                    lineaDetalle += ` | Mesa: ${mesaInvitado}`;
+                }
+            }
+
+            nombresArr.push(nombre);
+            invitados.push(invObj);
+            detallesLineas.push(lineaDetalle);
         }
         nombres = nombresArr.join(", ");
+        if (isManual) {
+            mesaResumenManual = resumirMesasDeInvitados(invitados);
+        }
     }
 
     const phoneField = isManual ? "manual-contact-phone" : "contact-phone";
@@ -517,13 +770,12 @@ function construirDatosReserva(formElement, countVal, prefix = "public", origen 
         detallesLineas.push(`Observaciones: ${observaciones}`);
     }
 
-    const mesa = isManual ? (formData.get("manual-mesa") || "").trim() : undefined;
     const notasInternas = isManual
         ? (formData.get("manual-notas-internas") || "").replace(/\r?\n/g, " ").trim()
         : undefined;
 
-    if (isManual && mesa) {
-        detallesLineas.push(`Mesa/Grupo: ${mesa}`);
+    if (isManual && mesaResumenManual) {
+        detallesLineas.push(`Mesa/Grupo: ${mesaResumenManual}`);
     }
 
     let detalles = detallesLineas.join("\n");
@@ -546,11 +798,10 @@ function construirDatosReserva(formElement, countVal, prefix = "public", origen 
         updatedAt: Date.now()
     };
 
-    // Solo incluir campos privados cuando se guarda desde el panel de organizadoras,
-    // para que si el invitado actualiza su respuesta web no borre su mesa asignada.
     if (isManual) {
-        resultado.mesa = mesa;
+        resultado.mesa = mesaResumenManual;
         resultado.notasInternas = notasInternas;
+        resultado.noAsistenMesas = count === 0 ? noAsistenMesas : [];
     }
 
     return resultado;
@@ -666,7 +917,59 @@ if (rsvpForm) {
             let savedDocId = existingDocId || "";
             if (isModificacion && existingDocId) {
                 try {
-                    await updateDoc(doc(db, reservasCollection, existingDocId), reservaData);
+                    const prevRef = doc(db, reservasCollection, existingDocId);
+                    const prevSnap = await getDoc(prevRef);
+                    if (prevSnap.exists()) {
+                        const prevData = prevSnap.data() || {};
+                        const prevInvitados = Array.isArray(prevData.invitados) ? prevData.invitados : [];
+                        const prevMesaFallback = String(prevData.mesa || "").trim();
+
+                        if (reservaData.asiste) {
+                            const usadosPrev = new Set();
+                            reservaData.invitados = reservaData.invitados.map((inv, idx) => {
+                                const normNuevo = normalizarNombrePersona(inv.nombre);
+                                let matchIdx = prevInvitados.findIndex(
+                                    (p, pIdx) => !usadosPrev.has(pIdx) && normalizarNombrePersona(p.nombre) === normNuevo
+                                );
+                                if (matchIdx === -1 && prevInvitados[idx] && !usadosPrev.has(idx)) {
+                                    matchIdx = idx;
+                                }
+                                if (matchIdx !== -1) {
+                                    usadosPrev.add(matchIdx);
+                                    const prevInv = prevInvitados[matchIdx];
+                                    const mesaHeredada = prevInv.mesa !== undefined ? prevInv.mesa : prevMesaFallback;
+                                    if (mesaHeredada) {
+                                        return {
+                                            ...inv,
+                                            mesa: mesaHeredada,
+                                            mesaId: prevInv.mesaId || ""
+                                        };
+                                    }
+                                }
+                                return inv;
+                            });
+                            reservaData.mesa = resumirMesasDeInvitados(reservaData.invitados);
+                            reservaData.noAsistenMesas = [];
+                        } else {
+                            // Si el invitado cambia de "Sí asisten" a "No asisten", conservar sus mesas previas
+                            // para que en el organizador de mesas aparezcan automáticamente como NO ASISTE.
+                            const prevConMesa = prevInvitados
+                                .map(p => ({
+                                    nombre: p.nombre || "",
+                                    mesa: p.mesa !== undefined ? p.mesa : prevMesaFallback,
+                                    mesaId: p.mesaId || ""
+                                }))
+                                .filter(p => p.mesa);
+                            if (prevConMesa.length > 0) {
+                                reservaData.noAsistenMesas = prevConMesa;
+                                reservaData.mesa = resumirMesasDeInvitados(prevConMesa);
+                            } else if (Array.isArray(prevData.noAsistenMesas) && prevData.noAsistenMesas.length > 0) {
+                                reservaData.noAsistenMesas = prevData.noAsistenMesas;
+                            }
+                        }
+                    }
+
+                    await updateDoc(prevRef, reservaData);
                 } catch (updateErr) {
                     // Si el documento fue eliminado por las organizadoras, creamos uno nuevo
                     reservaData.createdAt = Date.now();
@@ -812,6 +1115,14 @@ const btnCerrarDetalle = document.getElementById("btn-cerrar-detalle");
 const detalleHeader = document.getElementById("detalle-header");
 const detalleBody = document.getElementById("detalle-body");
 
+// Pestañas de Vistas (Reservas vs Organizador de Mesas)
+const tabVistaReservas = document.getElementById("tab-vista-reservas");
+const tabVistaMesas = document.getElementById("tab-vista-mesas");
+const vistaReservasPanel = document.getElementById("vista-reservas");
+const vistaMesasPanel = document.getElementById("vista-mesas");
+const tabCountReservas = document.getElementById("tab-count-reservas");
+const tabCountSinMesa = document.getElementById("tab-count-sin-mesa");
+
 // Modal de Gestión Manual / Edición
 const btnNuevaReservaManual = document.getElementById("btn-nueva-reserva-manual");
 const btnExportarCatering = document.getElementById("btn-exportar-catering");
@@ -828,16 +1139,48 @@ const manualExtraFields = document.getElementById("manual-extra-fields");
 const manualSongInput = document.getElementById("manual-song-suggestion");
 const manualPhoneInput = document.getElementById("manual-contact-phone");
 const manualNotesInput = document.getElementById("manual-rsvp-notes");
-const manualMesaInput = document.getElementById("manual-mesa");
 const manualNotasInternasInput = document.getElementById("manual-notas-internas");
 const modalManualTitle = document.getElementById("modal-manual-title");
 const modalManualSubtitle = document.getElementById("modal-manual-subtitle");
 const modalManualIcon = document.getElementById("modal-manual-icon");
 const btnGuardarManualText = document.getElementById("btn-guardar-manual-text");
 
+// Elementos del Organizador Visual de Mesas
+const panelPendientesMesa = document.getElementById("panel-pendientes-mesa");
+const listaPendientesMesa = document.getElementById("lista-pendientes-mesa");
+const badgePendientesMesa = document.getElementById("badge-pendientes-mesa");
+const btnTogglePendientesMesa = document.getElementById("btn-toggle-pendientes-mesa");
+const iconTogglePendientesMesa = document.getElementById("icon-toggle-pendientes-mesa");
+const textTogglePendientesMesa = document.getElementById("text-toggle-pendientes-mesa");
+const kpiScrollSinMesa = document.getElementById("kpi-scroll-sin-mesa");
+const buscadorMesas = document.getElementById("buscador-mesas");
+const btnClearMesasSearch = document.getElementById("btn-clear-mesas-search");
+const filtrosMesasContainer = document.getElementById("filtros-mesas");
+const btnNuevaMesa = document.getElementById("btn-nueva-mesa");
+const btnExportarMesasCsv = document.getElementById("btn-exportar-mesas-csv");
+const mesasGrid = document.getElementById("mesas-grid");
+
+// Modal Crear / Editar Mesa
+const modalMesa = document.getElementById("modal-mesa");
+const modalMesaOverlay = document.getElementById("modal-mesa-overlay");
+const btnCerrarModalMesa = document.getElementById("btn-cerrar-modal-mesa");
+const btnCancelarMesa = document.getElementById("btn-cancelar-mesa");
+const formMesa = document.getElementById("form-mesa");
+const mesaEditIdInput = document.getElementById("mesa-edit-id");
+const mesaNombreInput = document.getElementById("mesa-nombre-input");
+const mesaOrdenInput = document.getElementById("mesa-orden-input");
+const mesaCapacidadInput = document.getElementById("mesa-capacidad-input");
+const mesaNotaInput = document.getElementById("mesa-nota-input");
+const mesaInvitadosInicialesWrap = document.getElementById("mesa-invitados-iniciales-wrap");
+const mesaInvitadosInicialesInput = document.getElementById("mesa-invitados-iniciales");
+const modalMesaTitle = document.getElementById("modal-mesa-title");
+const modalMesaSubtitle = document.getElementById("modal-mesa-subtitle");
+const btnGuardarMesaText = document.getElementById("btn-guardar-mesa-text");
+
 // Modal de Confirmación de Eliminación
 const modalConfirmarEliminar = document.getElementById("modal-confirmar-eliminar");
 const modalEliminarOverlay = document.getElementById("modal-eliminar-overlay");
+const confirmarEliminarTitulo = document.getElementById("confirmar-eliminar-titulo");
 const confirmarEliminarTexto = document.getElementById("confirmar-eliminar-texto");
 const btnCancelarEliminar = document.getElementById("btn-cancelar-eliminar");
 const btnAceptarEliminar = document.getElementById("btn-aceptar-eliminar");
@@ -849,7 +1192,12 @@ let todasLasReservas = [];
 let filtroActivo = "todos";
 let filtroMesaActivo = "";
 let textoBusqueda = "";
+let vistaActivaPanel = "reservas";
+let filtroVistaMesas = "todas";
+let textoBusquedaMesas = "";
+let pendientesMesaOculto = false;
 let unsubscribeFirestore = null;
+let unsubscribeMesasFirestore = null;
 let resolverConfirmacionEliminar = null;
 
 /** Abre el modal de login privado (o entra directo si la sesión sigue activa en esta pestaña) */
@@ -973,6 +1321,7 @@ function mostrarPanelPrivado() {
     panelPrivado.style.display = "flex";
     panelPrivado.scrollTop = 0;
     iniciarEscuchaReservas();
+    iniciarEscuchaMesas();
 }
 
 /** Cierra la sesión del panel privado y vuelve a la web pública */
@@ -983,18 +1332,78 @@ function cerrarPanelPrivado() {
         unsubscribeFirestore();
         unsubscribeFirestore = null;
     }
+    if (unsubscribeMesasFirestore) {
+        unsubscribeMesasFirestore();
+        unsubscribeMesasFirestore = null;
+    }
     panelPrivado.style.display = "none";
     document.body.classList.remove("app-privada-activa");
     document.body.style.overflow = "";
 }
 
+/** Cambia entre la pestaña de Reservas y la pestaña de Distribución de Mesas */
+function cambiarVistaPanel(vista) {
+    vistaActivaPanel = vista === "mesas" ? "mesas" : "reservas";
+
+    if (tabVistaReservas) {
+        const esRes = vistaActivaPanel === "reservas";
+        tabVistaReservas.classList.toggle("active", esRes);
+        tabVistaReservas.setAttribute("aria-selected", esRes ? "true" : "false");
+    }
+    if (tabVistaMesas) {
+        const esMesas = vistaActivaPanel === "mesas";
+        tabVistaMesas.classList.toggle("active", esMesas);
+        tabVistaMesas.setAttribute("aria-selected", esMesas ? "true" : "false");
+    }
+    if (vistaReservasPanel) {
+        vistaReservasPanel.style.display = vistaActivaPanel === "reservas" ? "flex" : "none";
+    }
+    if (vistaMesasPanel) {
+        vistaMesasPanel.style.display = vistaActivaPanel === "mesas" ? "flex" : "none";
+    }
+    if (panelPrivado) {
+        panelPrivado.scrollTop = 0;
+    }
+}
+
 // ==========================================================================
-// 6. NORMALIZACIÓN DE DATOS Y CONTADORES GLOBALES DE FIRESTORE
+// 6. NORMALIZACIÓN DE DATOS, MOTOR DE MESAS Y CONTADORES GLOBALES
 // ==========================================================================
 
 /**
+ * Normaliza un documento de la colección "mesas" de Firestore.
+ */
+function normalizarMesa(id, data = {}) {
+    const rawMiembros = Array.isArray(data.miembrosPrevistos) ? data.miembrosPrevistos : [];
+    const miembrosPrevistos = rawMiembros
+        .map((m, idx) => {
+            if (typeof m === "string") {
+                return { id: `mp_${idx}`, nombre: m.trim() };
+            }
+            return {
+                id: String(m && m.id ? m.id : `mp_${idx}`),
+                nombre: String(m && m.nombre ? m.nombre : "").trim()
+            };
+        })
+        .filter(m => m.nombre !== "");
+
+    const ordenNum = Number(data.orden);
+    return {
+        id,
+        nombre: String(data.nombre || "Mesa").trim(),
+        orden: Number.isFinite(ordenNum) && ordenNum > 0 ? ordenNum : 999,
+        capacidad: Math.max(1, parseInt(data.capacidad, 10) || 10),
+        tipo: data.tipo === "imperial" ? "imperial" : "redonda",
+        nota: String(data.nota || "").trim(),
+        miembrosPrevistos,
+        createdAt: data.createdAt || 0,
+        updatedAt: data.updatedAt || 0
+    };
+}
+
+/**
  * Normaliza un documento de Firestore para asegurar que siempre tenga el array `invitados`
- * y todas las métricas calculadas (incluso si fue creado con formato antiguo).
+ * con su mesa individual y todas las métricas calculadas.
  */
 function normalizarReserva(id, data) {
     const rawAsistencia = String(data.asistencia || "Sí asisten");
@@ -1002,8 +1411,15 @@ function normalizarReserva(id, data) {
         ? Boolean(data.asiste)
         : !(/\bno\b|lamentabl/i.test(rawAsistencia));
 
+    const mesaLegacyReserva = String(data.mesa || "").trim();
     const detallesTexto = String(data.detalles || data.detalle || "");
-    let invitados = Array.isArray(data.invitados) ? [...data.invitados] : [];
+    let invitados = Array.isArray(data.invitados)
+        ? data.invitados.map(inv => ({
+            ...inv,
+            mesa: inv && inv.mesa !== undefined ? String(inv.mesa || "").trim() : mesaLegacyReserva,
+            mesaId: String((inv && inv.mesaId) || "").trim()
+        }))
+        : [];
 
     // Si no viene el array estructurado de invitados, extraerlo del campo detalles
     if (invitados.length === 0 && asiste && detallesTexto) {
@@ -1016,6 +1432,7 @@ function normalizarReserva(id, data) {
             const mMenu = bloque.match(/Men[uú]:\s*([^|\n]+)/i);
             const mAlergia = bloque.match(/Alergias?:\s*([^|\n]+)/i);
             const mBus = bloque.match(/Autob[uú]s:\s*([^|\n]+)/i);
+            const mMesa = bloque.match(/Mesa:\s*([^|\n]+)/i);
 
             const nombre = mNombre ? mNombre[1].trim() : `Invitado ${idx + 1}`;
             const menuRaw = mMenu ? mMenu[1].trim().toLowerCase() : "adulto";
@@ -1024,12 +1441,21 @@ function normalizarReserva(id, data) {
             const tieneAlergia = !/^(ninguna?|no|—|-|)$/i.test(alergia);
             const busRaw = mBus ? mBus[1].trim().toLowerCase() : "no";
             const bus = /^s[íi]/i.test(busRaw) ? "si" : "no";
+            const mesaExtraida = mMesa ? mMesa[1].trim() : mesaLegacyReserva;
 
-            invitados.push({ nombre, menu, tieneAlergia, alergia, bus });
+            invitados.push({
+                nombre,
+                menu,
+                tieneAlergia,
+                alergia,
+                bus,
+                mesa: mesaExtraida,
+                mesaId: ""
+            });
         });
     }
 
-    // Extraer canción sugerida, teléfono, observaciones, mesa y notas internas
+    // Extraer canción sugerida, teléfono, observaciones y notas internas
     let cancion = String(data.cancion || "").trim();
     if (!cancion && detallesTexto) {
         const mSong = detallesTexto.match(/Canc[ió]n sugerida[:\s]*([^\n]+)/i);
@@ -1049,8 +1475,8 @@ function normalizarReserva(id, data) {
         if (mObs && mObs[1]) observaciones = mObs[1].trim();
     }
 
-    const mesa = String(data.mesa || "").trim();
     const notasInternas = String(data.notasInternas || "").trim();
+    const noAsistenMesas = Array.isArray(data.noAsistenMesas) ? data.noAsistenMesas : [];
 
     // Calcular métricas por reserva
     let numInvitados = 0;
@@ -1088,6 +1514,10 @@ function normalizarReserva(id, data) {
         .replace(/\[(MODIFICACI[ÓO]N|MANUAL|EDITADO PANEL)\]/gi, "")
         .trim() || (invitados.length > 0 ? invitados.map(i => i.nombre).filter(Boolean).join(", ") : "Sin nombre");
 
+    const mesaResumen = asiste && invitados.length > 0
+        ? resumirMesasDeInvitados(invitados)
+        : mesaLegacyReserva;
+
     return {
         id,
         asistencia: asiste ? "Sí asisten" : "No asisten",
@@ -1096,9 +1526,10 @@ function normalizarReserva(id, data) {
         nombres: nombresLimpio,
         nombresRaw: rawNombres,
         invitados,
+        noAsistenMesas,
         telefono,
         observaciones,
-        mesa,
+        mesa: mesaResumen,
         notasInternas,
         detalles: detallesTexto,
         cancion,
@@ -1116,6 +1547,322 @@ function normalizarReserva(id, data) {
         tieneAlergiaGrupo: conAlergiaCount > 0,
         tieneBusGrupo: busCount > 0
     };
+}
+
+/**
+ * Cruza en tiempo real las mesas creadas con todas las reservas recibidas:
+ * - Asigna "Confirmado" a invitados confirmados sentados en esa mesa (explícitos o emparejados por nombre).
+ * - Asigna "NO ASISTE" si la persona asignada/prevista indicó en su reserva que no puede ir.
+ * - Asigna "FALTA POR CONFIRMAR" si la persona está en la mesa pero aún no ha reservado.
+ * - Detecta todos los asistentes confirmados que faltan por asignarse a una mesa.
+ */
+function calcularDistribucionMesas(mesasBase, reservas) {
+    const mesasCalc = mesasBase.map((m, idx) => ({
+        ...m,
+        ordenVisual: idx + 1,
+        esVirtual: false,
+        asientos: []
+    }));
+
+    const mesasPorId = new Map();
+    const mesasPorNombreNorm = new Map();
+
+    mesasCalc.forEach(m => {
+        mesasPorId.set(m.id, m);
+        const norm = normalizarNombrePersona(m.nombre);
+        if (norm && !mesasPorNombreNorm.has(norm)) {
+            mesasPorNombreNorm.set(norm, m);
+        }
+    });
+
+    const asegurarMesaParaNombre = (nombreMesaRaw) => {
+        const limpio = String(nombreMesaRaw || "").trim();
+        if (!limpio) return null;
+        const norm = normalizarNombrePersona(limpio);
+        if (!norm) return null;
+        if (mesasPorNombreNorm.has(norm)) return mesasPorNombreNorm.get(norm);
+
+        const virtual = {
+            id: `__virtual__${norm}`,
+            nombre: limpio,
+            orden: 9999,
+            ordenVisual: mesasCalc.length + 1,
+            capacidad: 10,
+            tipo: "redonda",
+            nota: "Detectada desde reservas",
+            miembrosPrevistos: [],
+            esVirtual: true,
+            asientos: []
+        };
+        mesasCalc.push(virtual);
+        mesasPorId.set(virtual.id, virtual);
+        mesasPorNombreNorm.set(norm, virtual);
+        return virtual;
+    };
+
+    const asistentesFlat = [];
+    const bajasPorNombreNorm = new Map();
+    const bajasConMesaExplicita = [];
+
+    reservas.forEach(r => {
+        if (r.asiste) {
+            const listaInv = r.invitados && r.invitados.length > 0
+                ? r.invitados
+                : [{
+                    nombre: r.nombres,
+                    menu: "adulto",
+                    tieneAlergia: false,
+                    alergia: "Ninguna",
+                    bus: "no",
+                    mesa: r.mesa || "",
+                    mesaId: ""
+                }];
+
+            listaInv.forEach((inv, idx) => {
+                const key = `${r.id}__${idx}`;
+                let mesaDestino = null;
+                if (inv.mesaId && mesasPorId.has(inv.mesaId)) {
+                    mesaDestino = mesasPorId.get(inv.mesaId);
+                } else if (inv.mesa) {
+                    mesaDestino = asegurarMesaParaNombre(inv.mesa);
+                }
+
+                asistentesFlat.push({
+                    key,
+                    reserva: r,
+                    guestIndex: idx,
+                    inv,
+                    nombre: inv.nombre || `Invitado ${idx + 1}`,
+                    nombreNorm: normalizarNombrePersona(inv.nombre || ""),
+                    mesaExplicita: mesaDestino
+                });
+            });
+        } else {
+            // Reserva con "No asisten": indexar nombres individuales y completos
+            const candidatos = dividirNombresPersonas(r.nombres);
+            const normCompleto = normalizarNombrePersona(r.nombres);
+            if (normCompleto && !bajasPorNombreNorm.has(normCompleto)) {
+                bajasPorNombreNorm.set(normCompleto, r);
+            }
+            candidatos.forEach(parte => {
+                const normP = normalizarNombrePersona(parte);
+                if (normP && !bajasPorNombreNorm.has(normP)) {
+                    bajasPorNombreNorm.set(normP, r);
+                }
+            });
+
+            if (Array.isArray(r.noAsistenMesas) && r.noAsistenMesas.length > 0) {
+                r.noAsistenMesas.forEach((item, bIdx) => {
+                    let mesaDest = null;
+                    if (item.mesaId && mesasPorId.has(item.mesaId)) {
+                        mesaDest = mesasPorId.get(item.mesaId);
+                    } else if (item.mesa) {
+                        mesaDest = asegurarMesaParaNombre(item.mesa);
+                    }
+                    if (mesaDest) {
+                        bajasConMesaExplicita.push({
+                            reserva: r,
+                            bajaIndex: bIdx,
+                            nombre: item.nombre || r.nombres,
+                            mesaDestino: mesaDest
+                        });
+                    }
+                });
+            } else if (r.mesa) {
+                const mesaDest = asegurarMesaParaNombre(r.mesa);
+                if (mesaDest) {
+                    const partes = candidatos.length > 0 ? candidatos : [r.nombres];
+                    partes.forEach((nom, bIdx) => {
+                        bajasConMesaExplicita.push({
+                            reserva: r,
+                            bajaIndex: bIdx,
+                            nombre: nom,
+                            mesaDestino: mesaDest
+                        });
+                    });
+                }
+            }
+        }
+    });
+
+    const assignedGuestKeys = new Set();
+    const guestEffectiveMesaMap = new Map();
+    const consumedMpPorMesa = new Map();
+
+    // PASO 1: Invitados confirmados asignados explícitamente a una mesa desde su reserva
+    asistentesFlat.forEach(g => {
+        if (!g.mesaExplicita) return;
+        const m = g.mesaExplicita;
+        assignedGuestKeys.add(g.key);
+        guestEffectiveMesaMap.set(g.key, {
+            id: m.id,
+            nombre: m.nombre,
+            orden: m.ordenVisual
+        });
+
+        let mpConsumido = null;
+        if (g.nombreNorm && Array.isArray(m.miembrosPrevistos)) {
+            const usados = consumedMpPorMesa.get(m.id) || new Set();
+            const matchMp = m.miembrosPrevistos.find(
+                mp => !usados.has(mp.id) && normalizarNombrePersona(mp.nombre) === g.nombreNorm
+            );
+            if (matchMp) {
+                usados.add(matchMp.id);
+                consumedMpPorMesa.set(m.id, usados);
+                mpConsumido = matchMp.id;
+            }
+        }
+
+        m.asientos.push({
+            tipoAsiento: "confirmado",
+            nombre: g.nombre,
+            reservaId: g.reserva.id,
+            guestIndex: g.guestIndex,
+            inv: g.inv,
+            reserva: g.reserva,
+            miembroPrevistoId: mpConsumido,
+            esExplicito: true
+        });
+    });
+
+    // PASO 2: Miembros previstos anotados manualmente en cada mesa por las novias
+    mesasCalc.forEach(m => {
+        const usadosMp = consumedMpPorMesa.get(m.id) || new Set();
+        const nombresBajaYaEnMesa = new Set();
+
+        m.miembrosPrevistos.forEach(mp => {
+            if (usadosMp.has(mp.id)) return;
+            const normMp = normalizarNombrePersona(mp.nombre);
+            if (!normMp) return;
+
+            // 2a. ¿Ha confirmado asistencia algún invitado con este nombre aún sin mesa explícita?
+            const matchAsistente = asistentesFlat.find(
+                g => !assignedGuestKeys.has(g.key) && g.nombreNorm === normMp
+            );
+
+            if (matchAsistente) {
+                assignedGuestKeys.add(matchAsistente.key);
+                guestEffectiveMesaMap.set(matchAsistente.key, {
+                    id: m.id,
+                    nombre: m.nombre,
+                    orden: m.ordenVisual
+                });
+                m.asientos.push({
+                    tipoAsiento: "confirmado",
+                    nombre: matchAsistente.nombre,
+                    reservaId: matchAsistente.reserva.id,
+                    guestIndex: matchAsistente.guestIndex,
+                    inv: matchAsistente.inv,
+                    reserva: matchAsistente.reserva,
+                    miembroPrevistoId: mp.id,
+                    esExplicito: false
+                });
+                return;
+            }
+
+            // 2b. ¿Ha respondido en una reserva diciendo que NO puede asistir?
+            if (bajasPorNombreNorm.has(normMp)) {
+                const resBaja = bajasPorNombreNorm.get(normMp);
+                nombresBajaYaEnMesa.add(normMp);
+                m.asientos.push({
+                    tipoAsiento: "no-asiste",
+                    nombre: mp.nombre,
+                    reservaId: resBaja.id,
+                    reserva: resBaja,
+                    miembroPrevistoId: mp.id,
+                    esBajaExplicita: false
+                });
+                return;
+            }
+
+            // 2c. Aún no ha reservado -> FALTA POR CONFIRMAR
+            m.asientos.push({
+                tipoAsiento: "pendiente",
+                nombre: mp.nombre,
+                miembroPrevistoId: mp.id
+            });
+        });
+
+        m._nombresBajaYaEnMesa = nombresBajaYaEnMesa;
+    });
+
+    // PASO 3: Personas que tenían mesa asignada en una reserva y marcaron "No asisten"
+    bajasConMesaExplicita.forEach(b => {
+        const m = b.mesaDestino;
+        if (!m) return;
+        const normB = normalizarNombrePersona(b.nombre);
+        if (normB && m._nombresBajaYaEnMesa && m._nombresBajaYaEnMesa.has(normB)) return;
+        if (normB && m._nombresBajaYaEnMesa) m._nombresBajaYaEnMesa.add(normB);
+
+        m.asientos.push({
+            tipoAsiento: "no-asiste",
+            nombre: b.nombre,
+            reservaId: b.reserva.id,
+            bajaIndex: b.bajaIndex,
+            reserva: b.reserva,
+            miembroPrevistoId: null,
+            esBajaExplicita: true
+        });
+    });
+
+    // PASO 4: Lista de asistentes confirmados que aún faltan por asignarse en mesa
+    const pendientesDeMesa = asistentesFlat.filter(g => !assignedGuestKeys.has(g.key));
+
+    // PASO 5: Métricas por cada mesa y totales globales
+    let totalConfirmadosEnMesa = 0;
+    let totalFaltaPorConfirmar = 0;
+    let totalNoAsistenEnMesa = 0;
+
+    mesasCalc.forEach(m => {
+        delete m._nombresBajaYaEnMesa;
+        m.confirmadosCount = m.asientos.filter(a => a.tipoAsiento === "confirmado").length;
+        m.pendientesCount = m.asientos.filter(a => a.tipoAsiento === "pendiente").length;
+        m.noAsistenCount = m.asientos.filter(a => a.tipoAsiento === "no-asiste").length;
+        m.ocupadosActivos = m.confirmadosCount + m.pendientesCount;
+        m.huecosLibres = Math.max(0, m.capacidad - m.ocupadosActivos);
+        m.exceso = Math.max(0, m.ocupadosActivos - m.capacidad);
+        m.estaCompleta = m.capacidad > 0 && m.ocupadosActivos >= m.capacidad;
+
+        totalConfirmadosEnMesa += m.confirmadosCount;
+        totalFaltaPorConfirmar += m.pendientesCount;
+        totalNoAsistenEnMesa += m.noAsistenCount;
+    });
+
+    return {
+        mesas: mesasCalc,
+        mesasPorId,
+        mesasPorNombreNorm,
+        pendientesDeMesa,
+        guestEffectiveMesaMap,
+        totales: {
+            totalMesas: mesasCalc.length,
+            totalConfirmadosEnMesa,
+            totalFaltaPorConfirmar,
+            totalNoAsistenEnMesa,
+            totalSinMesa: pendientesDeMesa.length
+        }
+    };
+}
+
+/**
+ * Devuelve el nombre efectivo de la mesa de un invitado concreto (explícita o vinculada desde la mesa).
+ */
+function obtenerNombreMesaEfectiva(reserva, idx, inv) {
+    if (distribucionActual && distribucionActual.guestEffectiveMesaMap) {
+        const info = distribucionActual.guestEffectiveMesaMap.get(`${reserva.id}__${idx}`);
+        if (info && info.nombre) return info.nombre;
+    }
+    return String((inv && inv.mesa) || "").trim();
+}
+
+/**
+ * Recalcula la distribución de mesas y refresca contadores, tarjetas de reservas y vista visual de mesas.
+ */
+function recalcularYActualizarTodo() {
+    distribucionActual = calcularDistribucionMesas(todasLasMesas, todasLasReservas);
+    actualizarContadoresGlobales(todasLasReservas);
+    aplicarFiltrosYRenderizar();
+    renderizarVistaMesas();
 }
 
 /**
@@ -1156,14 +1903,13 @@ async function iniciarEscuchaReservas() {
             lista.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
             todasLasReservas = lista;
-            actualizarContadoresGlobales(todasLasReservas);
-            aplicarFiltrosYRenderizar();
+            recalcularYActualizarTodo();
         }, (error) => {
             console.error("Error en onSnapshot de Firestore:", error);
             privadoLoading.style.display = "none";
             if (syncDot) syncDot.className = "sync-dot offline";
             if (syncText) syncText.textContent = "Error de conexión con Firestore";
-            mostrarErrorPrivado("No se pudieron cargar las reservas desde Firestore. Verifica la conexión o las reglas de seguridad.");
+            mostrarErrorPrivado("No se pudieron cargar las reservas desde Firestore. Verifica la conexión.");
         });
     } catch (err) {
         console.error("Error iniciando Firestore:", err);
@@ -1173,8 +1919,44 @@ async function iniciarEscuchaReservas() {
 }
 
 /**
+ * Conecta en tiempo real a la colección "mesas" de Firestore.
+ */
+async function iniciarEscuchaMesas() {
+    if (unsubscribeMesasFirestore) {
+        unsubscribeMesasFirestore();
+        unsubscribeMesasFirestore = null;
+    }
+
+    try {
+        const { db, mesasCollection } = await obtenerFirestore();
+        if (!document.body.classList.contains("app-privada-activa")) return;
+
+        const colMesasRef = collection(db, mesasCollection);
+        unsubscribeMesasFirestore = onSnapshot(colMesasRef, (snapshot) => {
+            const listaMesas = [];
+            snapshot.forEach(docSnap => {
+                listaMesas.push(normalizarMesa(docSnap.id, docSnap.data()));
+            });
+
+            listaMesas.sort((a, b) =>
+                (a.orden - b.orden) ||
+                (a.createdAt - b.createdAt) ||
+                a.nombre.localeCompare(b.nombre, "es", { numeric: true, sensitivity: "base" })
+            );
+
+            todasLasMesas = listaMesas;
+            recalcularYActualizarTodo();
+        }, (error) => {
+            console.warn("Aviso al escuchar colección mesas en Firestore:", error);
+        });
+    } catch (err) {
+        console.warn("Aviso iniciando escucha de mesas:", err);
+    }
+}
+
+/**
  * Actualiza al instante los contadores globales del Panel Privado:
- * Total Asisten, Menú Adulto, Menú Niño, Alergias, Plazas Bus, Canciones, Selector de Mesas y Píldoras de Filtro.
+ * Total Asisten, Menú Adulto, Menú Niño, Alergias, Plazas Bus, Canciones, Selector de Mesas y Pestañas.
  */
 function actualizarContadoresGlobales(reservas) {
     let totalAsisten = 0;
@@ -1192,9 +1974,6 @@ function actualizarContadoresGlobales(reservas) {
     let countReservasAlergia = 0;
     let countReservasBus = 0;
 
-    let asistentesSinMesa = 0;
-    const conteoPorMesa = new Map();
-
     reservas.forEach(r => {
         if (r.asiste) {
             countReservasAsisten++;
@@ -1210,12 +1989,6 @@ function actualizarContadoresGlobales(reservas) {
             if (r.tieneAlergiaGrupo) countReservasAlergia++;
             if (r.tieneBusGrupo) countReservasBus++;
 
-            if (r.mesa) {
-                conteoPorMesa.set(r.mesa, (conteoPorMesa.get(r.mesa) || 0) + r.numero_invitados);
-            } else {
-                asistentesSinMesa += r.numero_invitados;
-            }
-
             if (r.cancion) {
                 canciones.push({
                     nombre: r.cancion,
@@ -1227,7 +2000,6 @@ function actualizarContadoresGlobales(reservas) {
         }
     });
 
-    // Actualizar DOM de Stats Globales
     const setNum = (id, val) => {
         const el = document.getElementById(id);
         if (el) el.textContent = val;
@@ -1245,7 +2017,6 @@ function actualizarContadoresGlobales(reservas) {
         privadoStats.style.display = "grid";
     }
 
-    // Actualizar contadores en los botones de filtro rápido
     setNum("pill-count-todos", reservas.length);
     setNum("pill-count-asisten", countReservasAsisten);
     setNum("pill-count-no-asisten", countReservasNoAsisten);
@@ -1254,39 +2025,39 @@ function actualizarContadoresGlobales(reservas) {
     setNum("pill-count-alergia", countReservasAlergia);
     setNum("pill-count-bus", countReservasBus);
 
-    // Actualizar selector desplegable de Mesas / Grupos con nº de personas sentadas
+    // Actualizar contadores de las pestañas superiores
+    if (tabCountReservas) {
+        tabCountReservas.textContent = String(reservas.length);
+    }
+    const sinMesaTotal = distribucionActual ? distribucionActual.totales.totalSinMesa : 0;
+    if (tabCountSinMesa) {
+        if (sinMesaTotal === 0 && totalAsisten > 0) {
+            tabCountSinMesa.textContent = "Todo asignado";
+            tabCountSinMesa.className = "app-tab-badge badge-all-ok";
+        } else {
+            tabCountSinMesa.textContent = `${sinMesaTotal} sin mesa`;
+            tabCountSinMesa.className = "app-tab-badge badge-pending";
+        }
+    }
+
+    // Actualizar selector desplegable de Mesas en la vista de Reservas
     if (filtroMesaSelect) {
         const prevMesa = filtroMesaActivo;
-        const mesasOrdenadas = Array.from(conteoPorMesa.keys()).sort((a, b) =>
-            a.localeCompare(b, "es", { numeric: true, sensitivity: "base" })
-        );
+        const mesasLista = distribucionActual ? distribucionActual.mesas : [];
 
-        let optionsHtml = `<option value="">Todas las mesas / grupos</option>`;
-        optionsHtml += `<option value="__SIN_MESA__">🪑 Sin mesa asignada (${asistentesSinMesa} pers.)</option>`;
-        mesasOrdenadas.forEach(m => {
-            const pers = conteoPorMesa.get(m) || 0;
-            optionsHtml += `<option value="${escaparAtributo(m)}">🪑 ${escaparHTML(m)} (${pers} pers.)</option>`;
+        let optionsHtml = `<option value="">Todas las mesas</option>`;
+        optionsHtml += `<option value="__SIN_MESA__">🪑 Con invitados sin mesa (${sinMesaTotal} pers.)</option>`;
+        mesasLista.forEach(m => {
+            optionsHtml += `<option value="${escaparAtributo(m.nombre)}">🪑 ${escaparHTML(m.nombre)} (${m.confirmadosCount} conf. / ${m.capacidad})</option>`;
         });
 
         filtroMesaSelect.innerHTML = optionsHtml;
-        if (prevMesa === "__SIN_MESA__" || conteoPorMesa.has(prevMesa)) {
+        const nombresValidos = new Set(mesasLista.map(m => m.nombre));
+        if (prevMesa === "__SIN_MESA__" || nombresValidos.has(prevMesa)) {
             filtroMesaSelect.value = prevMesa;
         } else {
             filtroMesaActivo = "";
             filtroMesaSelect.value = "";
-        }
-
-        // Añadir mesas personalizadas al datalist del formulario manual
-        const datalist = document.getElementById("lista-mesas-sugeridas");
-        if (datalist) {
-            const existentes = new Set(Array.from(datalist.querySelectorAll("option")).map(o => o.value));
-            mesasOrdenadas.forEach(m => {
-                if (!existentes.has(m)) {
-                    const opt = document.createElement("option");
-                    opt.value = m;
-                    datalist.appendChild(opt);
-                }
-            });
         }
     }
 
@@ -1310,21 +2081,53 @@ function actualizarContadoresGlobales(reservas) {
 }
 
 /**
- * Filtra las reservas según el buscador en tiempo real, mesa/grupo y filtro rápido activo, y renderiza las tarjetas.
+ * Devuelve información de mesas efectivas de todos los asistentes de una reserva.
+ */
+function obtenerEstadoMesasDeReserva(r) {
+    if (!r.asiste) {
+        return { mesasUnicas: r.mesa ? [r.mesa] : [], algunoSinMesa: false, asignadosCount: 0 };
+    }
+    const listaInv = r.invitados && r.invitados.length > 0
+        ? r.invitados
+        : [{ nombre: r.nombres, mesa: r.mesa || "" }];
+
+    const mesasUnicas = [];
+    const vistas = new Set();
+    let asignadosCount = 0;
+    let algunoSinMesa = false;
+
+    listaInv.forEach((inv, idx) => {
+        const mNombre = obtenerNombreMesaEfectiva(r, idx, inv);
+        if (mNombre) {
+            asignadosCount++;
+            const norm = normalizarNombrePersona(mNombre);
+            if (!vistas.has(norm)) {
+                vistas.add(norm);
+                mesasUnicas.push(mNombre);
+            }
+        } else {
+            algunoSinMesa = true;
+        }
+    });
+
+    return { mesasUnicas, algunoSinMesa, asignadosCount };
+}
+
+/**
+ * Filtra las reservas según el buscador en tiempo real, mesa individual y filtro rápido activo, y renderiza las tarjetas.
  */
 function aplicarFiltrosYRenderizar() {
     if (!privadoCards) return;
 
-    // Sincronizar estado activo visual en las tarjetas KPI
     document.querySelectorAll(".app-kpi-card[data-quick-filter]").forEach(kpi => {
         const kf = kpi.getAttribute("data-quick-filter");
         kpi.classList.toggle("kpi-active", kf === filtroActivo);
     });
 
     const queryNorm = normalizarTextoBusqueda(textoBusqueda);
+    const filtroMesaNorm = normalizarNombrePersona(filtroMesaActivo);
 
     const filtradas = todasLasReservas.filter(r => {
-        // 1. Filtro por categoría rápida
         if (filtroActivo === "asisten" && !r.asiste) return false;
         if (filtroActivo === "no-asisten" && r.asiste) return false;
         if (filtroActivo === "adultos" && (!r.asiste || !r.tieneAdultosGrupo)) return false;
@@ -1332,18 +2135,22 @@ function aplicarFiltrosYRenderizar() {
         if (filtroActivo === "alergia" && (!r.asiste || !r.tieneAlergiaGrupo)) return false;
         if (filtroActivo === "bus" && (!r.asiste || !r.tieneBusGrupo)) return false;
 
-        // 2. Filtro por Mesa / Grupo
+        const infoMesas = obtenerEstadoMesasDeReserva(r);
         if (filtroMesaActivo === "__SIN_MESA__") {
-            if (!r.asiste || Boolean(r.mesa)) return false;
+            if (!r.asiste || !infoMesas.algunoSinMesa) return false;
         } else if (filtroMesaActivo) {
-            if (r.mesa !== filtroMesaActivo) return false;
+            const coincideMesa = infoMesas.mesasUnicas.some(
+                m => normalizarNombrePersona(m) === filtroMesaNorm
+            );
+            if (!coincideMesa) return false;
         }
 
-        // 3. Buscador en tiempo real (incluye mesa, teléfono, observaciones y notas internas)
         if (queryNorm) {
-            const nombresInvitados = r.invitados.map(i => `${i.nombre} ${i.alergia} ${i.menu}`).join(" ");
+            const nombresInvitados = r.invitados.map((inv, idx) =>
+                `${inv.nombre} ${inv.alergia} ${inv.menu} ${obtenerNombreMesaEfectiva(r, idx, inv)}`
+            ).join(" ");
             const textoCompleto = normalizarTextoBusqueda(
-                `${r.nombres} ${nombresInvitados} ${r.mesa} ${r.telefono} ${r.observaciones} ${r.notasInternas} ${r.detalles} ${r.cancion} ${r.asistencia} ${r.origen}`
+                `${r.nombres} ${nombresInvitados} ${infoMesas.mesasUnicas.join(" ")} ${r.telefono} ${r.observaciones} ${r.notasInternas} ${r.detalles} ${r.cancion} ${r.asistencia} ${r.origen}`
             );
             if (!textoCompleto.includes(queryNorm)) return false;
         }
@@ -1351,7 +2158,6 @@ function aplicarFiltrosYRenderizar() {
         return true;
     });
 
-    // Actualizar texto de resumen de resultados
     if (resultsCountEl) {
         if (todasLasReservas.length === 0) {
             resultsCountEl.textContent = "Aún no hay reservas registradas en Firestore.";
@@ -1367,7 +2173,7 @@ function aplicarFiltrosYRenderizar() {
 }
 
 /**
- * Renderiza las tarjetas de reservas en el Panel Privado con botones de acción CRUD directos (Ver, Editar, Eliminar).
+ * Renderiza las tarjetas de reservas en el Panel Privado mostrando la mesa individual de cada invitado.
  */
 function renderizarTarjetasReservas(reservas) {
     if (!privadoCards) return;
@@ -1392,20 +2198,31 @@ function renderizarTarjetasReservas(reservas) {
         const card = document.createElement("div");
         card.className = `app-reserva-card fade-in ${r.asiste ? "status-asiste" : "status-no-asiste"}`;
 
-        // Generar filas compactas de cada asistente para visualización inmediata
+        const infoMesas = obtenerEstadoMesasDeReserva(r);
+
         let invitadosMiniHtml = "";
         if (r.asiste && r.invitados.length > 0) {
             invitadosMiniHtml = `
                 <div class="app-card-guests-list">
-                    ${r.invitados.map(inv => {
+                    ${r.invitados.map((inv, idx) => {
                         const esNino = /ni[ñn]o|beb|infant/i.test(inv.menu || "");
                         const hayAlergia = Boolean(inv.tieneAlergia) && !/^(ninguna?|no|—|-|)$/i.test(inv.alergia || "");
                         const usaBus = /^s[íi]/i.test(inv.bus || "");
+                        const mesaInv = obtenerNombreMesaEfectiva(r, idx, inv);
 
                         return `
                         <div class="app-card-guest-item">
                             <span class="app-card-guest-name">${escaparHTML(inv.nombre || "Invitado")}</span>
                             <div class="app-card-guest-tags">
+                                ${mesaInv ? `
+                                    <span class="mini-tag tag-mesa" title="Mesa asignada a ${escaparAtributo(inv.nombre || "este invitado")}">
+                                        <i class="ph ph-armchair"></i> ${escaparHTML(mesaInv)}
+                                    </span>
+                                ` : `
+                                    <span class="mini-tag tag-sin-mesa" title="Falta por asignar mesa a este invitado">
+                                        <i class="ph ph-armchair"></i> Sin mesa
+                                    </span>
+                                `}
                                 <span class="mini-tag ${esNino ? "tag-nino" : "tag-adulto"}">
                                     ${esNino ? "👶 Niño" : "🍽️ Adulto"}
                                 </span>
@@ -1465,14 +2282,29 @@ function renderizarTarjetasReservas(reservas) {
             </div>
         ` : "";
 
-        const mesaBadge = r.mesa ? `
-            <span class="app-mesa-badge" title="Mesa o grupo asignado">
-                <i class="ph ph-armchair"></i> ${escaparHTML(r.mesa)}
-            </span>
-        ` : "";
+        let mesaBadge = "";
+        if (infoMesas.mesasUnicas.length === 1 && !infoMesas.algunoSinMesa) {
+            mesaBadge = `
+                <span class="app-mesa-badge" title="Mesa asignada">
+                    <i class="ph ph-armchair"></i> ${escaparHTML(infoMesas.mesasUnicas[0])}
+                </span>
+            `;
+        } else if (infoMesas.mesasUnicas.length > 1) {
+            mesaBadge = `
+                <span class="app-mesa-badge" title="Mesas: ${escaparAtributo(infoMesas.mesasUnicas.join(", "))}">
+                    <i class="ph ph-armchair"></i> ${infoMesas.mesasUnicas.length} mesas
+                </span>
+            `;
+        } else if (r.asiste && infoMesas.asignadosCount > 0 && infoMesas.algunoSinMesa) {
+            mesaBadge = `
+                <span class="app-mesa-badge" title="Algunos miembros ya tienen mesa y otros están pendientes">
+                    <i class="ph ph-armchair"></i> ${infoMesas.asignadosCount}/${r.numero_invitados} en mesa
+                </span>
+            `;
+        }
 
         const origenBadge = r.origen === "manual"
-            ? `<span class="app-origin-badge manual" title="Creada manualmente por organizadoras"><i class="ph ph-phone-Outgoing"></i> Manual</span>`
+            ? `<span class="app-origin-badge manual" title="Creada manualmente por organizadoras"><i class="ph ph-phone-outgoing"></i> Manual</span>`
             : `<span class="app-origin-badge web" title="Confirmada desde la web"><i class="ph ph-globe"></i> Web</span>`;
 
         card.innerHTML = `
@@ -1502,8 +2334,8 @@ function renderizarTarjetasReservas(reservas) {
                 <button type="button" class="app-card-btn btn-ver" title="Ver detalles completos">
                     <i class="ph ph-eye"></i> Detalle
                 </button>
-                <button type="button" class="app-card-btn btn-editar" title="Editar invitados, mesa, menús, alergias o bus">
-                    <i class="ph ph-pencil-simple"></i> Editar
+                <button type="button" class="app-card-btn btn-editar" title="Editar invitados, mesas individuales, menús, alergias o bus">
+                    <i class="ph ph-pencil-simple"></i> Editar / Mesas
                 </button>
                 <button type="button" class="app-card-btn btn-eliminar" title="Eliminar reserva de Firestore y Excel">
                     <i class="ph ph-trash"></i> Eliminar
@@ -1511,12 +2343,10 @@ function renderizarTarjetasReservas(reservas) {
             </div>
         `;
 
-        // Evitar que al pulsar enlaces de teléfono/WhatsApp se abra el modal de detalle
         card.querySelectorAll(".chip-link").forEach(link => {
             link.addEventListener("click", (e) => e.stopPropagation());
         });
 
-        // Eventos de la tarjeta
         const btnVer = card.querySelector(".btn-ver");
         const btnEditar = card.querySelector(".btn-editar");
         const btnEliminar = card.querySelector(".btn-eliminar");
@@ -1547,30 +2377,44 @@ function renderizarTarjetasReservas(reservas) {
 // ==========================================================================
 
 /**
- * Abre el modal para CREAR una nueva invitación manual.
+ * Abre el modal para CREAR una nueva invitación manual (opcionalmente pre-rellenada desde una mesa).
  */
-function abrirModalNuevaManual() {
+function abrirModalNuevaManual(prellenado = null) {
     if (!modalReservaManual || !manualForm) return;
     manualForm.reset();
     manualEditIdInput.value = "";
 
     if (modalManualTitle) modalManualTitle.textContent = "Nueva Invitación Manual";
-    if (modalManualSubtitle) modalManualSubtitle.textContent = "Ideal para registrar por teléfono a familiares o invitados que no usan la web.";
+    if (modalManualSubtitle) {
+        modalManualSubtitle.textContent = prellenado && prellenado.nombre
+            ? `Confirmando asistencia de ${prellenado.nombre}`
+            : "Ideal para registrar por teléfono a familiares o invitados que no usan la web.";
+    }
     if (modalManualIcon) modalManualIcon.innerHTML = '<i class="ph ph-user-plus"></i>';
     if (btnGuardarManualText) btnGuardarManualText.textContent = "Guardar en Firestore";
 
-    // Por defecto iniciar con 1 asistente listo para rellenar
     if (manualGuestCountSelect) {
         manualGuestCountSelect.value = "1";
     }
-    renderizarFilasInvitados(manualGuestsContainer, 1, "manual");
+    const valoresIniciales = prellenado && (prellenado.nombre || prellenado.mesa)
+        ? [{
+            nombre: prellenado.nombre || "",
+            mesa: prellenado.mesa || "",
+            menu: "adulto",
+            tieneAlergia: false,
+            alergia: "",
+            bus: "si"
+        }]
+        : [];
+
+    renderizarFilasInvitados(manualGuestsContainer, 1, "manual", valoresIniciales);
     if (manualExtraFields) manualExtraFields.style.display = "block";
 
     modalReservaManual.classList.add("activo");
 }
 
 /**
- * Abre el modal para EDITAR una reserva existente en Firestore.
+ * Abre el modal para EDITAR una reserva existente en Firestore (incluyendo la mesa de cada invitado).
  */
 function abrirModalEdicion(reserva) {
     if (!modalReservaManual || !manualForm) return;
@@ -1579,8 +2423,8 @@ function abrirModalEdicion(reserva) {
     manualForm.reset();
     manualEditIdInput.value = reserva.id;
 
-    if (modalManualTitle) modalManualTitle.textContent = "Editar Reserva";
-    if (modalManualSubtitle) modalManualSubtitle.textContent = `Modificando los datos de: ${reserva.nombres}`;
+    if (modalManualTitle) modalManualTitle.textContent = "Editar Reserva y Mesas";
+    if (modalManualSubtitle) modalManualSubtitle.textContent = `Modificando los datos y mesas individuales de: ${reserva.nombres}`;
     if (modalManualIcon) modalManualIcon.innerHTML = '<i class="ph ph-pencil-simple-line"></i>';
     if (btnGuardarManualText) btnGuardarManualText.textContent = "Guardar Cambios";
 
@@ -1590,12 +2434,22 @@ function abrirModalEdicion(reserva) {
         manualGuestCountSelect.value = String(count);
     }
 
+    const invitadosConMesaEfectiva = (reserva.invitados || []).map((inv, idx) => ({
+        ...inv,
+        mesa: obtenerNombreMesaEfectiva(reserva, idx, inv)
+    }));
+
+    const mesaNoAsistePrev = !reserva.asiste
+        ? ((reserva.noAsistenMesas && reserva.noAsistenMesas[0] && reserva.noAsistenMesas[0].mesa) || reserva.mesa || "")
+        : "";
+
     renderizarFilasInvitados(
         manualGuestsContainer,
         count,
         "manual",
-        reserva.invitados || [],
-        !reserva.asiste ? reserva.nombres : ""
+        invitadosConMesaEfectiva,
+        !reserva.asiste ? reserva.nombres : "",
+        mesaNoAsistePrev
     );
 
     if (manualExtraFields) {
@@ -1609,9 +2463,6 @@ function abrirModalEdicion(reserva) {
     }
     if (manualNotesInput) {
         manualNotesInput.value = reserva.observaciones || "";
-    }
-    if (manualMesaInput) {
-        manualMesaInput.value = reserva.mesa || "";
     }
     if (manualNotasInternasInput) {
         manualNotasInternasInput.value = reserva.notasInternas || "";
@@ -1627,8 +2478,8 @@ function cerrarModalManual() {
 }
 
 /**
- * Lee los valores actualmente escritos en el modal manual para no perderlos
- * si la organizadora cambia el selector de número de asistentes (ej. de 2 a 3).
+ * Lee los valores actualmente escritos en el modal manual (incluyendo mesa individual por invitado)
+ * para no perderlos si la organizadora cambia el selector de número de asistentes.
  */
 function capturarValoresActualesModalManual() {
     if (!manualForm || !manualGuestsContainer) return [];
@@ -1642,13 +2493,21 @@ function capturarValoresActualesModalManual() {
         const allergyChecked = manualForm.querySelector(`[name="manual-has-allergy-${i}"]:checked`);
         const allergyText = manualForm.querySelector(`[name="manual-alergia-tipo-${i}"]`);
         const busChecked = manualForm.querySelector(`[name="manual-bus-${i}"]:checked`);
+        const mesaSelect = manualForm.querySelector(`[name="manual-mesa-select-${i}"]`);
+        const mesaCustom = manualForm.querySelector(`[name="manual-mesa-custom-${i}"]`);
+
+        const selVal = mesaSelect ? mesaSelect.value : "";
+        const customVal = mesaCustom ? mesaCustom.value : "";
 
         actuales.push({
             nombre: nombreInput.value,
             menu: menuChecked ? menuChecked.value : "adulto",
             tieneAlergia: allergyChecked ? allergyChecked.value === "si" : false,
             alergia: allergyText ? allergyText.value : "",
-            bus: busChecked ? busChecked.value : "si"
+            bus: busChecked ? busChecked.value : "si",
+            mesaSelect: selVal,
+            mesaCustom: customVal,
+            mesa: selVal === "__NUEVA_MESA__" ? customVal : selVal
         });
     });
     return actuales;
@@ -1665,9 +2524,97 @@ if (manualGuestCountSelect) {
         } else if (count === 0) {
             if (manualExtraFields) manualExtraFields.style.display = "none";
             const nombrePrevio = valoresActuales.map(v => v.nombre).filter(Boolean).join(", ");
-            renderizarFilasInvitados(manualGuestsContainer, 0, "manual", [], nombrePrevio);
+            const primeraMesaPrevia = (valoresActuales.find(v => v.mesa) || {}).mesa || "";
+            renderizarFilasInvitados(manualGuestsContainer, 0, "manual", [], nombrePrevio, primeraMesaPrevia);
         }
     });
+}
+
+/**
+ * Si algún invitado de la reserva tiene escrita una mesa nueva que aún no existe en la colección "mesas",
+ * la crea automáticamente con el siguiente número de orden y vincula su mesaId.
+ */
+async function asegurarMesasNuevasEnFirestore(db, mesasCollection, reservaObj) {
+    const nombresCandidatos = [];
+    if (reservaObj.asiste && Array.isArray(reservaObj.invitados)) {
+        reservaObj.invitados.forEach(inv => {
+            if (inv.mesa && !inv.mesaId) nombresCandidatos.push(inv.mesa);
+        });
+    } else if (!reservaObj.asiste && Array.isArray(reservaObj.noAsistenMesas)) {
+        reservaObj.noAsistenMesas.forEach(item => {
+            if (item.mesa && !item.mesaId) nombresCandidatos.push(item.mesa);
+        });
+    }
+
+    if (nombresCandidatos.length === 0) return;
+
+    const existentesNorm = new Map();
+    todasLasMesas.forEach(m => existentesNorm.set(normalizarNombrePersona(m.nombre), m.id));
+
+    let siguienteOrden = todasLasMesas.reduce((max, m) => Math.max(max, m.orden < 999 ? m.orden : 0), 0) + 1;
+
+    for (const nombreMesa of nombresCandidatos) {
+        const norm = normalizarNombrePersona(nombreMesa);
+        if (!norm) continue;
+        if (!existentesNorm.has(norm)) {
+            const nuevaRef = await addDoc(collection(db, mesasCollection), {
+                nombre: nombreMesa.trim(),
+                orden: siguienteOrden++,
+                capacidad: 10,
+                tipo: "redonda",
+                nota: "",
+                miembrosPrevistos: [],
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+            });
+            existentesNorm.set(norm, nuevaRef.id);
+        }
+    }
+
+    if (reservaObj.asiste && Array.isArray(reservaObj.invitados)) {
+        reservaObj.invitados.forEach(inv => {
+            const norm = normalizarNombrePersona(inv.mesa);
+            if (norm && existentesNorm.has(norm)) {
+                inv.mesaId = existentesNorm.get(norm);
+            }
+        });
+    }
+}
+
+/**
+ * Si al editar una reserva una persona cambia de mesa o se deja sin mesa,
+ * limpia cualquier placeholder previo con su mismo nombre en la mesa antigua para evitar duplicados.
+ */
+async function limpiarPlaceholdersAlCambiarMesa(db, mesasCollection, reservaExistente, reservaNueva) {
+    if (!reservaExistente || !reservaExistente.asiste) return;
+    const prevInv = reservaExistente.invitados || [];
+    const nuevosInv = reservaNueva.invitados || [];
+
+    for (let idx = 0; idx < prevInv.length; idx++) {
+        const mesaAntigua = obtenerNombreMesaEfectiva(reservaExistente, idx, prevInv[idx]);
+        if (!mesaAntigua) continue;
+
+        const normNombre = normalizarNombrePersona(prevInv[idx].nombre);
+        const nuevoItem = nuevosInv.find(n => normalizarNombrePersona(n.nombre) === normNombre) || nuevosInv[idx];
+        const mesaNueva = nuevoItem ? String(nuevoItem.mesa || "").trim() : "";
+
+        if (normalizarNombrePersona(mesaAntigua) !== normalizarNombrePersona(mesaNueva)) {
+            const docMesaAntigua = todasLasMesas.find(
+                m => normalizarNombrePersona(m.nombre) === normalizarNombrePersona(mesaAntigua)
+            );
+            if (docMesaAntigua && normNombre) {
+                const filtrados = docMesaAntigua.miembrosPrevistos.filter(
+                    mp => normalizarNombrePersona(mp.nombre) !== normNombre
+                );
+                if (filtrados.length !== docMesaAntigua.miembrosPrevistos.length) {
+                    await updateDoc(doc(db, mesasCollection, docMesaAntigua.id), {
+                        miembrosPrevistos: filtrados,
+                        updatedAt: Date.now()
+                    });
+                }
+            }
+        }
+    }
 }
 
 // Guardar Reserva Manual o Edición en Firestore
@@ -1689,26 +2636,46 @@ if (manualForm) {
         btnGuardar.disabled = true;
         btnGuardar.innerHTML = '<i class="ph ph-spinner icon-pulse"></i> <span>Guardando...</span>';
 
-        // Mantener el origen original si se está editando, o "manual" si es nueva
         let origenReserva = "manual";
         let nombresOriginal = "";
+        let existente = null;
+        let noAsistenMesasPrevias = [];
+
         if (esEdicion) {
-            const existente = todasLasReservas.find(r => r.id === editId);
+            existente = todasLasReservas.find(r => r.id === editId) || null;
             if (existente) {
                 if (existente.origen) origenReserva = existente.origen;
                 nombresOriginal = existente.nombres || "";
+                if (existente.asiste && parseInt(countVal, 10) === 0) {
+                    noAsistenMesasPrevias = (existente.invitados || [])
+                        .map((inv, idx) => {
+                            const mEfectiva = obtenerNombreMesaEfectiva(existente, idx, inv);
+                            const mDoc = mEfectiva
+                                ? todasLasMesas.find(m => normalizarNombrePersona(m.nombre) === normalizarNombrePersona(mEfectiva))
+                                : null;
+                            return {
+                                nombre: inv.nombre || "",
+                                mesa: mEfectiva,
+                                mesaId: mDoc ? mDoc.id : (inv.mesaId || "")
+                            };
+                        })
+                        .filter(x => x.mesa);
+                }
             }
         }
 
-        const reservaObj = construirDatosReserva(manualForm, countVal, "manual", origenReserva);
+        const reservaObj = construirDatosReserva(manualForm, countVal, "manual", origenReserva, {
+            noAsistenMesasPrevias
+        });
 
         try {
-            const { db, reservasCollection } = await obtenerFirestore();
+            const { db, reservasCollection, mesasCollection } = await obtenerFirestore();
+
+            await asegurarMesasNuevasEnFirestore(db, mesasCollection, reservaObj);
 
             if (esEdicion) {
-                // Actualizar documento existente en Firestore
+                await limpiarPlaceholdersAlCambiarMesa(db, mesasCollection, existente, reservaObj);
                 await updateDoc(doc(db, reservasCollection, editId), reservaObj);
-                // Sincronizar cambio con Google Sheets
                 enviarEspejoGoogleSheets(reservaObj, "[EDITADO PANEL]", {
                     accion: "actualizar",
                     id: editId,
@@ -1716,10 +2683,8 @@ if (manualForm) {
                 });
                 mostrarToast(`Reserva de ${reservaObj.nombres} actualizada correctamente`, "success");
             } else {
-                // Crear nuevo documento en Firestore
                 reservaObj.createdAt = Date.now();
                 const docRef = await addDoc(collection(db, reservasCollection), reservaObj);
-                // Sincronizar nueva reserva con Google Sheets y Telegram
                 enviarEspejoGoogleSheets(reservaObj, "[MANUAL]", {
                     accion: "crear",
                     id: docRef.id
@@ -1739,17 +2704,25 @@ if (manualForm) {
 }
 
 /**
- * Muestra un modal de confirmación elegante antes de eliminar una reserva.
+ * Muestra un modal de confirmación elegante antes de eliminar una reserva o una mesa.
  */
-function solicitarConfirmacionEliminar(reserva) {
+function solicitarConfirmacionEliminar(reserva, opcionesCustom = null) {
+    const titulo = opcionesCustom && opcionesCustom.titulo
+        ? opcionesCustom.titulo
+        : "¿Eliminar esta reserva?";
+    const htmlTexto = opcionesCustom && opcionesCustom.htmlTexto
+        ? opcionesCustom.htmlTexto
+        : `Vas a eliminar definitivamente la reserva de <strong>${escaparHTML(reserva.nombres)}</strong> tanto del panel (Firestore) como del Excel de Google Sheets.`;
+
     if (!modalConfirmarEliminar) {
-        return Promise.resolve(
-            window.confirm(`¿Seguro que deseas eliminar definitivamente la reserva de "${reserva.nombres}"?`)
-        );
+        return Promise.resolve(window.confirm(titulo));
     }
 
+    if (confirmarEliminarTitulo) {
+        confirmarEliminarTitulo.textContent = titulo;
+    }
     if (confirmarEliminarTexto) {
-        confirmarEliminarTexto.innerHTML = `Vas a eliminar definitivamente la reserva de <strong>${escaparHTML(reserva.nombres)}</strong> tanto del panel (Firestore) como del Excel de Google Sheets.`;
+        confirmarEliminarTexto.innerHTML = htmlTexto;
     }
     modalConfirmarEliminar.classList.add("activo");
 
@@ -1790,7 +2763,7 @@ async function confirmarYEliminarReserva(reserva) {
 
 /**
  * Exporta en 1 clic un archivo CSV compatible con Excel España (UTF-8 BOM + separador ';')
- * con el desglose invitado por invitado para el Catering y la empresa de Autobuses.
+ * ordenando a cada persona por su mesa individual (incluso si miembros de una misma reserva van en mesas distintas).
  */
 function exportarInformeCatering() {
     const asistentes = todasLasReservas.filter(r => r.asiste);
@@ -1807,20 +2780,50 @@ function exportarInformeCatering() {
         return str;
     };
 
-    // Ordenar primero por Mesa / Grupo y luego por nombre del grupo
-    const ordenadas = [...asistentes].sort((a, b) => {
-        const mesaA = a.mesa || "ZZZ_Sin asignar";
-        const mesaB = b.mesa || "ZZZ_Sin asignar";
-        const cmpMesa = mesaA.localeCompare(mesaB, "es", { numeric: true, sensitivity: "base" });
+    const ordenPorMesaNorm = new Map();
+    if (distribucionActual && Array.isArray(distribucionActual.mesas)) {
+        distribucionActual.mesas.forEach((m, idx) => {
+            ordenPorMesaNorm.set(normalizarNombrePersona(m.nombre), idx + 1);
+        });
+    }
+
+    const filasPersonas = [];
+    asistentes.forEach(r => {
+        const listaInv = r.invitados && r.invitados.length > 0
+            ? r.invitados
+            : [{ nombre: r.nombres, menu: "adulto", tieneAlergia: false, alergia: "Ninguna", bus: "no" }];
+
+        listaInv.forEach((inv, idx) => {
+            const mesaIndiv = obtenerNombreMesaEfectiva(r, idx, inv);
+            const normM = normalizarNombrePersona(mesaIndiv);
+            const ordenM = normM && ordenPorMesaNorm.has(normM) ? ordenPorMesaNorm.get(normM) : 99999;
+
+            filasPersonas.push({
+                reserva: r,
+                inv,
+                idx,
+                mesaIndiv: mesaIndiv || "Sin asignar",
+                tieneMesa: Boolean(mesaIndiv),
+                ordenMesa: ordenM
+            });
+        });
+    });
+
+    filasPersonas.sort((a, b) => {
+        if (a.tieneMesa !== b.tieneMesa) return a.tieneMesa ? -1 : 1;
+        if (a.ordenMesa !== b.ordenMesa) return a.ordenMesa - b.ordenMesa;
+        const cmpMesa = a.mesaIndiv.localeCompare(b.mesaIndiv, "es", { numeric: true, sensitivity: "base" });
         if (cmpMesa !== 0) return cmpMesa;
-        return a.nombres.localeCompare(b.nombres, "es", { sensitivity: "base" });
+        const cmpGrupo = a.reserva.nombres.localeCompare(b.reserva.nombres, "es", { sensitivity: "base" });
+        if (cmpGrupo !== 0) return cmpGrupo;
+        return a.idx - b.idx;
     });
 
     const filasCSV = [];
     filasCSV.push([
-        "Grupo / Reserva",
-        "Mesa / Grupo",
+        "Mesa Individual",
         "Nombre Invitado",
+        "Grupo / Reserva",
         "Menú",
         "¿Alergia?",
         "Detalle Alergias / Intolerancias",
@@ -1839,43 +2842,37 @@ function exportarInformeCatering() {
     let totalAlergias = 0;
     let totalBus = 0;
 
-    ordenadas.forEach(r => {
-        const listaInv = r.invitados && r.invitados.length > 0
-            ? r.invitados
-            : [{ nombre: r.nombres, menu: "adulto", tieneAlergia: false, alergia: "Ninguna", bus: "no" }];
+    filasPersonas.forEach(item => {
+        const { reserva: r, inv, idx, mesaIndiv } = item;
+        totalPersonas++;
+        const esNino = /ni[ñn]o|beb|infant/i.test(inv.menu || "");
+        if (esNino) totalNinos++;
+        else totalAdultos++;
 
-        listaInv.forEach((inv, idx) => {
-            totalPersonas++;
-            const esNino = /ni[ñn]o|beb|infant/i.test(inv.menu || "");
-            if (esNino) totalNinos++;
-            else totalAdultos++;
+        const alergiaTxt = String(inv.alergia || "").trim();
+        const hayAlergia = Boolean(inv.tieneAlergia) && !/^(ninguna?|no|—|-|)$/i.test(alergiaTxt);
+        if (hayAlergia) totalAlergias++;
 
-            const alergiaTxt = String(inv.alergia || "").trim();
-            const hayAlergia = Boolean(inv.tieneAlergia) && !/^(ninguna?|no|—|-|)$/i.test(alergiaTxt);
-            if (hayAlergia) totalAlergias++;
+        const usaBus = /^s[íi]/i.test(String(inv.bus || ""));
+        if (usaBus) totalBus++;
 
-            const usaBus = /^s[íi]/i.test(String(inv.bus || ""));
-            if (usaBus) totalBus++;
-
-            filasCSV.push([
-                r.nombres,
-                r.mesa || "Sin asignar",
-                inv.nombre || `Invitado ${idx + 1}`,
-                esNino ? "Niño" : "Adulto",
-                hayAlergia ? "SÍ" : "No",
-                hayAlergia ? alergiaTxt : "Ninguna",
-                usaBus ? "SÍ" : "No",
-                idx === 0 ? (r.telefono || "") : "",
-                idx === 0 ? (r.observaciones || "") : "",
-                idx === 0 ? (r.notasInternas || "") : "",
-                idx === 0 ? (r.cancion || "") : "",
-                r.origen === "manual" ? "Manual" : "Web",
-                r.fecha || ""
-            ].map(escaparCSV).join(";"));
-        });
+        filasCSV.push([
+            mesaIndiv,
+            inv.nombre || `Invitado ${idx + 1}`,
+            r.nombres,
+            esNino ? "Niño" : "Adulto",
+            hayAlergia ? "SÍ" : "No",
+            hayAlergia ? alergiaTxt : "Ninguna",
+            usaBus ? "SÍ" : "No",
+            r.telefono || "",
+            r.observaciones || "",
+            r.notasInternas || "",
+            r.cancion || "",
+            r.origen === "manual" ? "Manual" : "Web",
+            r.fecha || ""
+        ].map(escaparCSV).join(";"));
     });
 
-    // Añadir bloque resumen final para el Catering y Autobuses
     filasCSV.push("");
     filasCSV.push(["RESUMEN GLOBAL CATERING Y AUTOBUSES", "TOTAL"].join(";"));
     filasCSV.push(["Total Asistentes Confirmados", totalPersonas].join(";"));
@@ -1910,6 +2907,7 @@ function abrirModalDetalle(reserva) {
     const nombresLista = reserva.invitados && reserva.invitados.length > 0
         ? reserva.invitados.map(i => i.nombre)
         : [reserva.nombres];
+    const infoMesas = obtenerEstadoMesasDeReserva(reserva);
 
     detalleHeader.innerHTML = `
         <div class="detalle-header-top-row">
@@ -1919,7 +2917,7 @@ function abrirModalDetalle(reserva) {
             </span>
             <div class="detalle-crud-actions">
                 <button type="button" class="app-btn app-btn-secondary btn-sm" id="btn-detalle-editar">
-                    <i class="ph ph-pencil-simple"></i> Editar datos
+                    <i class="ph ph-pencil-simple"></i> Editar datos / mesas
                 </button>
                 <button type="button" class="app-btn app-btn-danger btn-sm" id="btn-detalle-eliminar">
                     <i class="ph ph-trash"></i> Eliminar
@@ -1931,7 +2929,6 @@ function abrirModalDetalle(reserva) {
         </div>
     `;
 
-    // Conectar botones de Editar y Eliminar dentro del modal de detalle
     const btnDetEditar = document.getElementById("btn-detalle-editar");
     const btnDetEliminar = document.getElementById("btn-detalle-eliminar");
     if (btnDetEditar) btnDetEditar.addEventListener("click", () => abrirModalEdicion(reserva));
@@ -1945,12 +2942,16 @@ function abrirModalDetalle(reserva) {
             const textoMenu = esNino ? "Menú Niño" : "Menú Adulto";
             const tieneAlergia = Boolean(inv.tieneAlergia) && !/^(ninguna?|no|—|-|)$/i.test(inv.alergia || "");
             const esBus = /^s[íi]/i.test(inv.bus || "");
+            const mesaInv = obtenerNombreMesaEfectiva(reserva, i, inv);
             const delay = (i * 60) + "ms";
 
             return `
             <div class="detalle-guest-card fade-in" style="animation-delay:${delay}">
                 <div class="guest-name-large">${escaparHTML(inv.nombre || `Invitado ${i + 1}`)}</div>
                 <div class="guest-badges">
+                    <span class="guest-badge ${mesaInv ? "badge-mesa" : "badge-sin-mesa"}">
+                        🪑 <span>${escaparHTML(mesaInv || "Sin mesa asignada")}</span>
+                    </span>
                     <span class="guest-badge badge-menu ${esNino ? "nino" : "adulto"}">
                         ${emojiMenu} <span>${textoMenu}</span>
                     </span>
@@ -1971,6 +2972,10 @@ function abrirModalDetalle(reserva) {
         `;
     }
 
+    const resumenMesasTexto = infoMesas.mesasUnicas.length > 0
+        ? infoMesas.mesasUnicas.join(", ") + (infoMesas.algunoSinMesa ? " (con personas pendientes de mesa)" : "")
+        : "Sin asignar";
+
     let extraFieldsHtml = `
         <div class="detalle-field fade-in">
             <div class="detalle-field-label">📅 Fecha de registro</div>
@@ -1981,8 +2986,8 @@ function abrirModalDetalle(reserva) {
             <div class="detalle-field-value">${reserva.origen === "manual" ? "Registro Manual (Organizadoras)" : "Formulario Web Público"}</div>
         </div>
         <div class="detalle-field fade-in">
-            <div class="detalle-field-label">🪑 Mesa / Grupo</div>
-            <div class="detalle-field-value">${escaparHTML(reserva.mesa || "Sin asignar")}</div>
+            <div class="detalle-field-label">🪑 Mesas de la reserva</div>
+            <div class="detalle-field-value">${escaparHTML(resumenMesasTexto)}</div>
         </div>
     `;
 
@@ -2030,7 +3035,7 @@ function abrirModalDetalle(reserva) {
 
     detalleBody.innerHTML = `
         <div class="detalle-section">
-            <h4 class="detalle-section-title"><i class="ph ph-users-three"></i> Desglose de Asistentes</h4>
+            <h4 class="detalle-section-title"><i class="ph ph-users-three"></i> Desglose de Asistentes y Mesas</h4>
             <div class="detalle-guests-list">${detallesHtml}</div>
         </div>
         <div class="detalle-section">
@@ -2045,6 +3050,1147 @@ function abrirModalDetalle(reserva) {
 function cerrarModalDetalle() {
     if (!modalDetalle) return;
     modalDetalle.classList.remove("activo");
+}
+
+// ==========================================================================
+// 8B. ORGANIZADOR VISUAL Y MANUAL DE MESAS (Croquis, Estados y Asignación)
+// ==========================================================================
+
+/**
+ * Genera el croquis gráfico (redondo o imperial) con las sillas alrededor de la mesa.
+ */
+function generarCroquisVisualMesaHTML(mesa) {
+    const asientosActivos = mesa.asientos.filter(a => a.tipoAsiento !== "no-asiste");
+    const totalSillas = Math.max(mesa.capacidad, asientosActivos.length);
+    const maxSillasVisual = Math.min(totalSillas, 16);
+
+    const construirSillaHTML = (idx, posStyle = "") => {
+        const asiento = asientosActivos[idx];
+        const esExceso = idx >= mesa.capacidad;
+        let claseEstado = "chair-libre";
+        let textoSilla = String(idx + 1);
+        let tooltip = `Asiento ${idx + 1}: Libre`;
+
+        if (asiento) {
+            textoSilla = obtenerInicialesPersona(asiento.nombre);
+            if (asiento.tipoAsiento === "confirmado") {
+                claseEstado = "chair-confirmado";
+                tooltip = `✅ Confirmado: ${asiento.nombre}`;
+            } else {
+                claseEstado = "chair-pendiente";
+                tooltip = `⏳ FALTA POR CONFIRMAR: ${asiento.nombre}`;
+            }
+        }
+
+        return `
+            <div class="croquis-chair ${claseEstado} ${esExceso ? "chair-exceso" : ""}"
+                 style="${posStyle}"
+                 title="${escaparAtributo(tooltip)}">
+                ${escaparHTML(textoSilla)}
+            </div>
+        `;
+    };
+
+    const subTextoCentro = mesa.exceso > 0
+        ? `+${mesa.exceso} sobre cupo`
+        : (mesa.huecosLibres === 0 ? "¡Mesa completa!" : `${mesa.huecosLibres} libre${mesa.huecosLibres === 1 ? "" : "s"}`);
+
+    const centroHtml = `
+        <div class="croquis-table-surface">
+            <span class="croquis-surface-nums">${mesa.confirmadosCount}/${mesa.capacidad}</span>
+            <span class="croquis-surface-sub">Confirmados</span>
+            <small style="font-size:0.64rem; color:#833441; font-weight:600; margin-top:1px;">${escaparHTML(subTextoCentro)}</small>
+        </div>
+    `;
+
+    if (mesa.tipo === "imperial") {
+        const mitadSuperior = Math.ceil(maxSillasVisual / 2);
+        let filaArriba = "";
+        let filaAbajo = "";
+        for (let i = 0; i < maxSillasVisual; i++) {
+            if (i < mitadSuperior) filaArriba += construirSillaHTML(i);
+            else filaAbajo += construirSillaHTML(i);
+        }
+        return `
+            <div class="croquis-stage is-imperial">
+                <div class="croquis-imperial-row">${filaArriba}</div>
+                ${centroHtml}
+                <div class="croquis-imperial-row">${filaAbajo}</div>
+            </div>
+        `;
+    }
+
+    // Mesa Redonda (sillas distribuidas en círculo de 360º)
+    let sillasCirculoHtml = "";
+    for (let i = 0; i < maxSillasVisual; i++) {
+        const angulo = (2 * Math.PI * i) / maxSillasVisual - Math.PI / 2;
+        const leftPct = (50 + 41 * Math.cos(angulo)).toFixed(2);
+        const topPct = (50 + 41 * Math.sin(angulo)).toFixed(2);
+        sillasCirculoHtml += construirSillaHTML(i, `left:${leftPct}%; top:${topPct}%;`);
+    }
+
+    return `
+        <div class="croquis-stage is-redonda">
+            ${centroHtml}
+            ${sillasCirculoHtml}
+        </div>
+    `;
+}
+
+/**
+ * Renderiza por completo la pestaña "Distribución de Mesas":
+ * KPIs, panel de quién falta por asignarse en mesa y tarjetas visuales de mesas.
+ */
+function renderizarVistaMesas() {
+    if (!distribucionActual) return;
+
+    const { mesas, pendientesDeMesa, totales } = distribucionActual;
+
+    const setTexto = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(val);
+    };
+
+    setTexto("stat-mesas-creadas", totales.totalMesas);
+    setTexto("stat-mesas-confirmados", totales.totalConfirmadosEnMesa);
+    setTexto("stat-mesas-pendientes", totales.totalFaltaPorConfirmar);
+    setTexto("stat-mesas-no-asisten", totales.totalNoAsistenEnMesa);
+    setTexto("stat-mesas-sin-asignar", totales.totalSinMesa);
+    setTexto("badge-pendientes-mesa", totales.totalSinMesa);
+
+    // 1. Renderizar panel "¿Quién falta por asignarse en mesa?"
+    if (panelPendientesMesa && listaPendientesMesa) {
+        const todoAsignado = totales.totalSinMesa === 0;
+        panelPendientesMesa.classList.toggle("all-assigned", todoAsignado);
+        listaPendientesMesa.style.display = pendientesMesaOculto ? "none" : "grid";
+
+        if (pendientesDeMesa.length === 0) {
+            const hayAlgunAsistente = totales.totalConfirmadosEnMesa > 0;
+            listaPendientesMesa.innerHTML = `
+                <div class="pendientes-empty-ok">
+                    <i class="ph ph-${hayAlgunAsistente ? "seal-check" : "info"}" style="font-size:1.3rem;"></i>
+                    <span>${hayAlgunAsistente
+                        ? "🎉 ¡Todos los asistentes confirmados tienen ya su sitio asignado en una mesa!"
+                        : "Cuando lleguen reservas confirmadas sin mesa asignada, aparecerán aquí para ubicarlas en 1 clic."}</span>
+                </div>
+            `;
+        } else {
+            const opcionesMesasHtml = mesas.map(m =>
+                `<option value="${escaparAtributo(m.nombre)}">🪑 ${escaparHTML(m.ordenVisual + ". " + m.nombre)} (${m.ocupadosActivos}/${m.capacidad})</option>`
+            ).join("");
+
+            listaPendientesMesa.innerHTML = pendientesDeMesa.map(item => {
+                const esNino = /ni[ñn]o|beb|infant/i.test(item.inv.menu || "");
+                const hayAlergia = Boolean(item.inv.tieneAlergia) && !/^(ninguna?|no|—|-|)$/i.test(item.inv.alergia || "");
+
+                return `
+                    <div class="pendiente-guest-card">
+                        <div class="pendiente-guest-top">
+                            <div>
+                                <div class="pendiente-guest-name">${escaparHTML(item.nombre)}</div>
+                                <div class="pendiente-guest-group">Reserva: ${escaparHTML(item.reserva.nombres)}</div>
+                            </div>
+                            <div class="app-card-guest-tags">
+                                <span class="mini-tag ${esNino ? "tag-nino" : "tag-adulto"}">${esNino ? "👶" : "🍽️"}</span>
+                                ${hayAlergia ? `<span class="mini-tag tag-alergia" title="${escaparAtributo(item.inv.alergia)}">⚠️ ${escaparHTML(item.inv.alergia)}</span>` : ""}
+                            </div>
+                        </div>
+                        <div class="pendiente-guest-actions">
+                            <select class="pendiente-assign-select"
+                                    data-reserva-id="${escaparAtributo(item.reserva.id)}"
+                                    data-guest-idx="${item.guestIndex}"
+                                    aria-label="Asignar mesa a ${escaparAtributo(item.nombre)}">
+                                <option value="">${mesas.length > 0 ? "Asignar a una mesa..." : "Crea primero una mesa abajo"}</option>
+                                ${opcionesMesasHtml}
+                            </select>
+                            <button type="button"
+                                    class="mesa-icon-btn btn-edit-res-from-pendiente"
+                                    data-reserva-id="${escaparAtributo(item.reserva.id)}"
+                                    title="Abrir edición completa de esta reserva">
+                                <i class="ph ph-pencil-simple"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+
+            listaPendientesMesa.querySelectorAll(".pendiente-assign-select").forEach(sel => {
+                sel.addEventListener("change", function () {
+                    const nombreMesa = this.value;
+                    if (!nombreMesa) return;
+                    const resId = this.getAttribute("data-reserva-id");
+                    const gIdx = parseInt(this.getAttribute("data-guest-idx"), 10);
+                    asignarInvitadoIndividualAMesa(resId, gIdx, nombreMesa);
+                });
+            });
+
+            listaPendientesMesa.querySelectorAll(".btn-edit-res-from-pendiente").forEach(btn => {
+                btn.addEventListener("click", function () {
+                    const resId = this.getAttribute("data-reserva-id");
+                    const r = todasLasReservas.find(x => x.id === resId);
+                    if (r) abrirModalEdicion(r);
+                });
+            });
+        }
+    }
+
+    // 2. Filtrar y renderizar el Grid Visual de Mesas
+    if (!mesasGrid) return;
+    mesasGrid.innerHTML = "";
+
+    const queryNorm = normalizarTextoBusqueda(textoBusquedaMesas);
+
+    const mesasFiltradas = mesas.filter(m => {
+        if (filtroVistaMesas === "con-huecos" && m.huecosLibres <= 0) return false;
+        if (filtroVistaMesas === "completas" && !m.estaCompleta) return false;
+        if (filtroVistaMesas === "con-pendientes" && m.pendientesCount <= 0) return false;
+        if (filtroVistaMesas === "con-bajas" && m.noAsistenCount <= 0) return false;
+
+        if (queryNorm) {
+            const nombresAsientos = m.asientos.map(a => a.nombre).join(" ");
+            const textoMesa = normalizarTextoBusqueda(`${m.nombre} ${m.nota} ${nombresAsientos}`);
+            if (!textoMesa.includes(queryNorm)) return false;
+        }
+        return true;
+    });
+
+    if (mesas.length === 0) {
+        mesasGrid.innerHTML = `
+            <div class="app-empty-state">
+                <div class="app-empty-icon">
+                    <i class="ph ph-armchair"></i>
+                </div>
+                <h3>Aún no habéis creado ninguna mesa</h3>
+                <p>Cread vuestra lista ordenada de mesas y anotad qué invitados irán en cada una. Conforme vayan llegando las reservas de la web, sus sitios cambiarán solos a <strong>Confirmado</strong> o <strong>NO ASISTE</strong>.</p>
+                <div class="mesas-empty-actions">
+                    <button type="button" class="app-btn app-btn-primary" id="btn-empty-crear-mesa">
+                        <i class="ph ph-plus-circle"></i> Crear primera mesa
+                    </button>
+                    <button type="button" class="app-btn app-btn-secondary" id="btn-empty-plantilla-mesas">
+                        <i class="ph ph-sparkle"></i> Generar lista base (Presidencial + 6 Mesas)
+                    </button>
+                </div>
+            </div>
+        `;
+        const btnCrear1 = document.getElementById("btn-empty-crear-mesa");
+        const btnPlantilla = document.getElementById("btn-empty-plantilla-mesas");
+        if (btnCrear1) btnCrear1.addEventListener("click", abrirModalNuevaMesa);
+        if (btnPlantilla) btnPlantilla.addEventListener("click", crearPlantillaMesasBase);
+        return;
+    }
+
+    if (mesasFiltradas.length === 0) {
+        mesasGrid.innerHTML = `
+            <div class="app-empty-state">
+                <div class="app-empty-icon">
+                    <i class="ph ph-magnifying-glass"></i>
+                </div>
+                <h3>Ninguna mesa coincide con este filtro</h3>
+                <p>Prueba otro término de búsqueda o pulsa en "Todas" para ver el salón completo.</p>
+            </div>
+        `;
+        return;
+    }
+
+    mesasFiltradas.forEach((m) => {
+        const realIdx = todasLasMesas.findIndex(tm => tm.id === m.id);
+        const puedeSubir = !m.esVirtual && realIdx > 0;
+        const puedeBajar = !m.esVirtual && realIdx !== -1 && realIdx < todasLasMesas.length - 1;
+
+        const pctConfirmado = Math.min(100, (m.confirmadosCount / m.capacidad) * 100);
+        const pctPendiente = Math.min(100 - pctConfirmado, (m.pendientesCount / m.capacidad) * 100);
+
+        const capPillClass = m.exceso > 0 ? "is-over" : (m.estaCompleta ? "is-full" : "");
+        const capPillText = m.exceso > 0
+            ? `⚠️ ${m.ocupadosActivos}/${m.capacidad} (+${m.exceso})`
+            : `${m.ocupadosActivos}/${m.capacidad} plazas`;
+
+        // Ordenar visualmente asientos: Confirmados -> Falta por confirmar -> No asisten
+        const ordenPrioridad = { "confirmado": 1, "pendiente": 2, "no-asiste": 3 };
+        const asientosOrdenados = [...m.asientos].sort(
+            (a, b) => (ordenPrioridad[a.tipoAsiento] || 9) - (ordenPrioridad[b.tipoAsiento] || 9)
+        );
+
+        let numSillaActiva = 0;
+        const filasAsientosHtml = asientosOrdenados.length === 0
+            ? `<div class="mesa-seats-empty">Mesa vacía. Añade abajo invitados previstos o asígnalos desde sus reservas.</div>`
+            : asientosOrdenados.map(asiento => {
+                if (asiento.tipoAsiento === "confirmado") {
+                    numSillaActiva++;
+                    const inv = asiento.inv || {};
+                    const esNino = /ni[ñn]o|beb|infant/i.test(inv.menu || "");
+                    const hayAlergia = Boolean(inv.tieneAlergia) && !/^(ninguna?|no|—|-|)$/i.test(inv.alergia || "");
+                    const usaBus = /^s[íi]/i.test(inv.bus || "");
+
+                    const moveOptions = mesas.map(dest => {
+                        const sel = normalizarNombrePersona(dest.nombre) === normalizarNombrePersona(m.nombre) ? "selected" : "";
+                        return `<option value="${escaparAtributo(dest.nombre)}" ${sel}>🪑 ${escaparHTML(dest.nombre)}</option>`;
+                    }).join("");
+
+                    return `
+                        <div class="seat-row is-confirmado">
+                            <div class="seat-main-info">
+                                <span class="seat-num">${numSillaActiva}</span>
+                                <div class="seat-person-details">
+                                    <span class="seat-person-name">${escaparHTML(asiento.nombre)}</span>
+                                    <div class="seat-person-meta">
+                                        <span>${esNino ? "👶 Niño" : "🍽️ Adulto"}</span>
+                                        ${hayAlergia ? `<span style="color:#dc2626; font-weight:700;">· ⚠️ ${escaparHTML(inv.alergia)}</span>` : ""}
+                                        ${usaBus ? `<span>· 🚌 Bus</span>` : ""}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="seat-right-controls">
+                                <span class="seat-status-pill confirmado">✓ Confirmado</span>
+                                <select class="seat-move-select"
+                                        data-reserva-id="${escaparAtributo(asiento.reservaId)}"
+                                        data-guest-idx="${asiento.guestIndex}"
+                                        data-origen-mesa-id="${escaparAtributo(m.id)}"
+                                        data-mp-id="${escaparAtributo(asiento.miembroPrevistoId || "")}"
+                                        title="Mover a otra mesa o quitar de esta mesa">
+                                    <option value="">— Quitar mesa —</option>
+                                    ${moveOptions}
+                                </select>
+                                <button type="button"
+                                        class="seat-mini-btn btn-seat-edit-res"
+                                        data-reserva-id="${escaparAtributo(asiento.reservaId)}"
+                                        title="Editar reserva completa">
+                                    <i class="ph ph-pencil-simple"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                if (asiento.tipoAsiento === "pendiente") {
+                    numSillaActiva++;
+                    return `
+                        <div class="seat-row is-pendiente">
+                            <div class="seat-main-info">
+                                <span class="seat-num">${numSillaActiva}</span>
+                                <div class="seat-person-details">
+                                    <span class="seat-person-name">${escaparHTML(asiento.nombre)}</span>
+                                    <div class="seat-person-meta">
+                                        <span>Aún no ha enviado su reserva</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="seat-right-controls">
+                                <span class="seat-status-pill pendiente">⏳ FALTA POR CONFIRMAR</span>
+                                <button type="button"
+                                        class="seat-mini-btn confirm-quick btn-seat-crear-reserva"
+                                        data-nombre="${escaparAtributo(asiento.nombre)}"
+                                        data-mesa-nombre="${escaparAtributo(m.nombre)}"
+                                        title="Registrar confirmación manual por teléfono para esta persona">
+                                    <i class="ph ph-check-bold"></i>
+                                </button>
+                                <button type="button"
+                                        class="seat-mini-btn remove-seat btn-seat-quitar-mp"
+                                        data-mesa-id="${escaparAtributo(m.id)}"
+                                        data-mp-id="${escaparAtributo(asiento.miembroPrevistoId || "")}"
+                                        title="Quitar de esta mesa">
+                                    <i class="ph ph-x"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // NO ASISTE
+                return `
+                    <div class="seat-row is-no-asiste">
+                        <div class="seat-main-info">
+                            <span class="seat-num">✕</span>
+                            <div class="seat-person-details">
+                                <span class="seat-person-name">${escaparHTML(asiento.nombre)}</span>
+                                <div class="seat-person-meta" style="color:#b91c1c;">
+                                    <span>Indicó en su reserva que no puede asistir (plaza libre)</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="seat-right-controls">
+                            <span class="seat-status-pill no-asiste">✕ NO ASISTE</span>
+                            ${asiento.reservaId ? `
+                                <button type="button"
+                                        class="seat-mini-btn btn-seat-ver-baja"
+                                        data-reserva-id="${escaparAtributo(asiento.reservaId)}"
+                                        title="Ver detalle de su respuesta de No Asistencia">
+                                    <i class="ph ph-eye"></i>
+                                </button>
+                            ` : ""}
+                            <button type="button"
+                                    class="seat-mini-btn remove-seat btn-seat-quitar-baja"
+                                    data-mesa-id="${escaparAtributo(m.id)}"
+                                    data-mesa-nombre="${escaparAtributo(m.nombre)}"
+                                    data-mp-id="${escaparAtributo(asiento.miembroPrevistoId || "")}"
+                                    data-reserva-id="${escaparAtributo(asiento.reservaId || "")}"
+                                    data-es-baja-explicita="${asiento.esBajaExplicita ? "1" : "0"}"
+                                    title="Limpiar de la lista de esta mesa">
+                                <i class="ph ph-x"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+
+        const card = document.createElement("div");
+        card.className = `mesa-visual-card fade-in ${m.exceso > 0 ? "mesa-exceso" : (m.estaCompleta ? "mesa-completa" : "")}`;
+
+        card.innerHTML = `
+            <div class="mesa-card-header">
+                <div class="mesa-title-wrap">
+                    <span class="mesa-order-badge">#${m.ordenVisual}</span>
+                    <div>
+                        <h3 class="mesa-card-title">${escaparHTML(m.nombre)}</h3>
+                        ${m.nota ? `<div class="mesa-card-note"><i class="ph ph-map-pin-line"></i> ${escaparHTML(m.nota)}</div>` : ""}
+                    </div>
+                </div>
+                <div class="mesa-header-controls">
+                    ${m.esVirtual ? `
+                        <button type="button" class="app-btn app-btn-secondary btn-sm btn-guardar-virtual" title="Guardar esta mesa formalmente en la lista">
+                            <i class="ph ph-floppy-disk"></i> Guardar
+                        </button>
+                    ` : `
+                        <button type="button" class="mesa-icon-btn btn-mesa-up" ${!puedeSubir ? "disabled" : ""} title="Subir posición en el orden de mesas">
+                            <i class="ph ph-arrow-up"></i>
+                        </button>
+                        <button type="button" class="mesa-icon-btn btn-mesa-down" ${!puedeBajar ? "disabled" : ""} title="Bajar posición en el orden de mesas">
+                            <i class="ph ph-arrow-down"></i>
+                        </button>
+                        <button type="button" class="mesa-icon-btn btn-mesa-edit" title="Editar nombre, sillas o forma de la mesa">
+                            <i class="ph ph-pencil-simple"></i>
+                        </button>
+                        <button type="button" class="mesa-icon-btn danger btn-mesa-delete" title="Eliminar mesa">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    `}
+                </div>
+            </div>
+
+            <div class="mesa-croquis-box">
+                ${generarCroquisVisualMesaHTML(m)}
+                <div class="mesa-occupancy-summary">
+                    <div class="mesa-progress-track">
+                        <div class="mesa-progress-seg seg-confirmado" style="width:${pctConfirmado}%"></div>
+                        <div class="mesa-progress-seg seg-pendiente" style="width:${pctPendiente}%"></div>
+                    </div>
+                    <div class="mesa-mini-counters">
+                        <span>✅ ${m.confirmadosCount} conf. · ⏳ ${m.pendientesCount} pend.${m.noAsistenCount > 0 ? ` · ❌ ${m.noAsistenCount} baja` : ""}</span>
+                        <span class="mesa-cap-pill ${capPillClass}">${escaparHTML(capPillText)}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mesa-seats-list">
+                ${filasAsientosHtml}
+            </div>
+
+            ${!m.esVirtual ? `
+                <form class="mesa-add-member-form" data-mesa-id="${escaparAtributo(m.id)}">
+                    <input type="text"
+                           class="mesa-add-member-input"
+                           placeholder="Añadir invitado a esta mesa (ej: Ana Ruiz o varios con coma)..."
+                           autocomplete="off">
+                    <button type="submit" class="app-btn app-btn-primary btn-sm">
+                        <i class="ph ph-plus"></i> Añadir
+                    </button>
+                </form>
+            ` : ""}
+        `;
+
+        // Eventos de cabecera de la mesa
+        const btnUp = card.querySelector(".btn-mesa-up");
+        const btnDown = card.querySelector(".btn-mesa-down");
+        const btnEdit = card.querySelector(".btn-mesa-edit");
+        const btnDel = card.querySelector(".btn-mesa-delete");
+        const btnVirtualSave = card.querySelector(".btn-guardar-virtual");
+
+        if (btnUp) btnUp.addEventListener("click", () => moverOrdenMesa(m.id, -1));
+        if (btnDown) btnDown.addEventListener("click", () => moverOrdenMesa(m.id, 1));
+        if (btnEdit) btnEdit.addEventListener("click", () => abrirModalEditarMesa(m));
+        if (btnDel) btnDel.addEventListener("click", () => confirmarYEliminarMesa(m));
+        if (btnVirtualSave) btnVirtualSave.addEventListener("click", () => convertirMesaVirtualEnReal(m.nombre));
+
+        // Eventos de los asientos de la mesa
+        card.querySelectorAll(".seat-move-select").forEach(sel => {
+            sel.addEventListener("change", function () {
+                const resId = this.getAttribute("data-reserva-id");
+                const gIdx = parseInt(this.getAttribute("data-guest-idx"), 10);
+                const origenMesaId = this.getAttribute("data-origen-mesa-id");
+                const mpId = this.getAttribute("data-mp-id");
+                const nuevaMesaNombre = this.value;
+                asignarInvitadoIndividualAMesa(resId, gIdx, nuevaMesaNombre, { origenMesaId, mpId });
+            });
+        });
+
+        card.querySelectorAll(".btn-seat-edit-res").forEach(btn => {
+            btn.addEventListener("click", function () {
+                const resId = this.getAttribute("data-reserva-id");
+                const r = todasLasReservas.find(x => x.id === resId);
+                if (r) abrirModalEdicion(r);
+            });
+        });
+
+        card.querySelectorAll(".btn-seat-crear-reserva").forEach(btn => {
+            btn.addEventListener("click", function () {
+                abrirModalNuevaManual({
+                    nombre: this.getAttribute("data-nombre") || "",
+                    mesa: this.getAttribute("data-mesa-nombre") || ""
+                });
+            });
+        });
+
+        card.querySelectorAll(".btn-seat-quitar-mp").forEach(btn => {
+            btn.addEventListener("click", function () {
+                quitarMiembroPrevistoDeMesa(
+                    this.getAttribute("data-mesa-id"),
+                    this.getAttribute("data-mp-id")
+                );
+            });
+        });
+
+        card.querySelectorAll(".btn-seat-ver-baja").forEach(btn => {
+            btn.addEventListener("click", function () {
+                const resId = this.getAttribute("data-reserva-id");
+                const r = todasLasReservas.find(x => x.id === resId);
+                if (r) abrirModalDetalle(r);
+            });
+        });
+
+        card.querySelectorAll(".btn-seat-quitar-baja").forEach(btn => {
+            btn.addEventListener("click", function () {
+                quitarBajaDeMesa({
+                    mesaId: this.getAttribute("data-mesa-id"),
+                    mesaNombre: this.getAttribute("data-mesa-nombre"),
+                    mpId: this.getAttribute("data-mp-id"),
+                    reservaId: this.getAttribute("data-reserva-id"),
+                    esBajaExplicita: this.getAttribute("data-es-baja-explicita") === "1"
+                });
+            });
+        });
+
+        // Formulario rápido para añadir personas previstas a esta mesa
+        const formAdd = card.querySelector(".mesa-add-member-form");
+        if (formAdd) {
+            formAdd.addEventListener("submit", async function (e) {
+                e.preventDefault();
+                const input = this.querySelector(".mesa-add-member-input");
+                if (!input) return;
+                const val = input.value.trim();
+                if (!val) return;
+                input.disabled = true;
+                await anadirMiembrosPrevistosAMesa(m.id, val);
+                input.value = "";
+                input.disabled = false;
+                input.focus();
+            });
+        }
+
+        mesasGrid.appendChild(card);
+    });
+}
+
+/**
+ * Asigna o mueve a UN invitado concreto dentro de una reserva a una mesa determinada (o lo deja sin mesa).
+ */
+async function asignarInvitadoIndividualAMesa(reservaId, guestIndex, nuevoNombreMesa, extra = {}) {
+    const reserva = todasLasReservas.find(r => r.id === reservaId);
+    if (!reserva) return;
+
+    try {
+        const { db, reservasCollection, mesasCollection } = await obtenerFirestore();
+
+        const listaInv = reserva.invitados && reserva.invitados.length > 0
+            ? reserva.invitados.map(inv => ({ ...inv }))
+            : [{
+                nombre: reserva.nombres,
+                menu: "adulto",
+                tieneAlergia: false,
+                alergia: "Ninguna",
+                bus: "no",
+                mesa: reserva.mesa || "",
+                mesaId: ""
+            }];
+
+        if (!listaInv[guestIndex]) return;
+
+        const nombreInvitado = listaInv[guestIndex].nombre || "Invitado";
+        const mesaLimpia = String(nuevoNombreMesa || "").trim();
+        const mesaDoc = mesaLimpia
+            ? todasLasMesas.find(m => normalizarNombrePersona(m.nombre) === normalizarNombrePersona(mesaLimpia))
+            : null;
+
+        listaInv[guestIndex].mesa = mesaLimpia;
+        listaInv[guestIndex].mesaId = mesaDoc ? mesaDoc.id : "";
+
+        // Si el invitado provenía de un miembro previsto en otra mesa y se cambia o quita, limpiar el placeholder antiguo
+        if (extra.origenMesaId && extra.mpId && (!mesaDoc || mesaDoc.id !== extra.origenMesaId)) {
+            const mesaOrigen = todasLasMesas.find(m => m.id === extra.origenMesaId);
+            if (mesaOrigen) {
+                const nuevosMp = mesaOrigen.miembrosPrevistos.filter(mp => mp.id !== extra.mpId);
+                await updateDoc(doc(db, mesasCollection, mesaOrigen.id), {
+                    miembrosPrevistos: nuevosMp,
+                    updatedAt: Date.now()
+                });
+            }
+        }
+
+        const mesaResumen = resumirMesasDeInvitados(listaInv);
+        await updateDoc(doc(db, reservasCollection, reservaId), {
+            invitados: listaInv,
+            mesa: mesaResumen,
+            updatedAt: Date.now()
+        });
+
+        mostrarToast(
+            mesaLimpia
+                ? `${nombreInvitado} asignado/a a ${mesaLimpia}`
+                : `${nombreInvitado} quedó pendiente de asignar a mesa`,
+            "success"
+        );
+    } catch (err) {
+        console.error("Error asignando mesa individual:", err);
+        mostrarToast("No se pudo actualizar la mesa del invitado", "error");
+    }
+}
+
+/**
+ * Añade uno o varios invitados previstos (separados por comas o saltos de línea) a una mesa.
+ */
+async function anadirMiembrosPrevistosAMesa(mesaId, textoNombres) {
+    const mesa = todasLasMesas.find(m => m.id === mesaId);
+    if (!mesa) return;
+
+    const nuevosNombres = textoNombres
+        .split(/[\r\n,;]+/)
+        .map(s => s.trim())
+        .filter(Boolean);
+
+    if (nuevosNombres.length === 0) return;
+
+    const yaEnMesaNorm = new Set([
+        ...mesa.miembrosPrevistos.map(mp => normalizarNombrePersona(mp.nombre))
+    ]);
+
+    if (distribucionActual && distribucionActual.mesasPorId.has(mesaId)) {
+        distribucionActual.mesasPorId.get(mesaId).asientos.forEach(a => {
+            yaEnMesaNorm.add(normalizarNombrePersona(a.nombre));
+        });
+    }
+
+    const agregados = [];
+    nuevosNombres.forEach(nom => {
+        const norm = normalizarNombrePersona(nom);
+        if (norm && !yaEnMesaNorm.has(norm)) {
+            yaEnMesaNorm.add(norm);
+            agregados.push({
+                id: generarIdCorto(),
+                nombre: nom
+            });
+        }
+    });
+
+    if (agregados.length === 0) {
+        mostrarToast("Ese nombre ya figura en esta mesa", "info");
+        return;
+    }
+
+    try {
+        const { db, mesasCollection } = await obtenerFirestore();
+        await updateDoc(doc(db, mesasCollection, mesaId), {
+            miembrosPrevistos: [...mesa.miembrosPrevistos, ...agregados],
+            updatedAt: Date.now()
+        });
+        mostrarToast(
+            agregados.length === 1
+                ? `${agregados[0].nombre} añadido/a a ${mesa.nombre}`
+                : `${agregados.length} invitados añadidos a ${mesa.nombre}`,
+            "success"
+        );
+    } catch (err) {
+        console.error("Error añadiendo invitado previsto a mesa:", err);
+        mostrarToast("No se pudo añadir el invitado a la mesa", "error");
+    }
+}
+
+/**
+ * Elimina a una persona prevista ("FALTA POR CONFIRMAR") de una mesa.
+ */
+async function quitarMiembroPrevistoDeMesa(mesaId, mpId) {
+    const mesa = todasLasMesas.find(m => m.id === mesaId);
+    if (!mesa || !mpId) return;
+
+    try {
+        const { db, mesasCollection } = await obtenerFirestore();
+        const filtrados = mesa.miembrosPrevistos.filter(mp => mp.id !== mpId);
+        await updateDoc(doc(db, mesasCollection, mesaId), {
+            miembrosPrevistos: filtrados,
+            updatedAt: Date.now()
+        });
+        mostrarToast("Invitado retirado de la mesa", "info");
+    } catch (err) {
+        console.error("Error quitando miembro previsto:", err);
+        mostrarToast("No se pudo retirar de la mesa", "error");
+    }
+}
+
+/**
+ * Limpia de una mesa una fila en estado "NO ASISTE" (sin borrar la reserva de no asistencia).
+ */
+async function quitarBajaDeMesa({ mesaId, mesaNombre, mpId, reservaId, esBajaExplicita }) {
+    try {
+        const { db, reservasCollection, mesasCollection } = await obtenerFirestore();
+
+        if (mpId && mesaId && !mesaId.startsWith("__virtual__")) {
+            const mesa = todasLasMesas.find(m => m.id === mesaId);
+            if (mesa) {
+                const filtrados = mesa.miembrosPrevistos.filter(mp => mp.id !== mpId);
+                await updateDoc(doc(db, mesasCollection, mesaId), {
+                    miembrosPrevistos: filtrados,
+                    updatedAt: Date.now()
+                });
+            }
+        }
+
+        if (esBajaExplicita && reservaId) {
+            const r = todasLasReservas.find(x => x.id === reservaId);
+            if (r) {
+                const normMesa = normalizarNombrePersona(mesaNombre);
+                const nuevasBajas = (r.noAsistenMesas || []).filter(
+                    b => b.mesaId !== mesaId && normalizarNombrePersona(b.mesa) !== normMesa
+                );
+                const nuevaMesaTexto = normalizarNombrePersona(r.mesa) === normMesa
+                    ? resumirMesasDeInvitados(nuevasBajas)
+                    : r.mesa;
+                await updateDoc(doc(db, reservasCollection, reservaId), {
+                    noAsistenMesas: nuevasBajas,
+                    mesa: nuevaMesaTexto,
+                    updatedAt: Date.now()
+                });
+            }
+        }
+
+        mostrarToast("Asiento liberado de la mesa", "info");
+    } catch (err) {
+        console.error("Error quitando baja de mesa:", err);
+        mostrarToast("No se pudo actualizar la mesa", "error");
+    }
+}
+
+/**
+ * Reordena hacia arriba (-1) o abajo (+1) una mesa en la lista de las novias.
+ */
+async function moverOrdenMesa(mesaId, direccion) {
+    const idx = todasLasMesas.findIndex(m => m.id === mesaId);
+    const nuevoIdx = idx + direccion;
+    if (idx === -1 || nuevoIdx < 0 || nuevoIdx >= todasLasMesas.length) return;
+
+    const copia = [...todasLasMesas];
+    const [movida] = copia.splice(idx, 1);
+    copia.splice(nuevoIdx, 0, movida);
+
+    try {
+        const { db, mesasCollection } = await obtenerFirestore();
+        await Promise.all(
+            copia.map((m, i) =>
+                updateDoc(doc(db, mesasCollection, m.id), {
+                    orden: i + 1,
+                    updatedAt: Date.now()
+                })
+            )
+        );
+    } catch (err) {
+        console.error("Error reordenando mesas:", err);
+        mostrarToast("No se pudo cambiar el orden de la mesa", "error");
+    }
+}
+
+/**
+ * Convierte una mesa detectada en reservas en un documento formal de la colección "mesas".
+ */
+async function convertirMesaVirtualEnReal(nombreMesa) {
+    try {
+        const { db, mesasCollection } = await obtenerFirestore();
+        const siguienteOrden = todasLasMesas.length + 1;
+        await addDoc(collection(db, mesasCollection), {
+            nombre: nombreMesa,
+            orden: siguienteOrden,
+            capacidad: 10,
+            tipo: "redonda",
+            nota: "",
+            miembrosPrevistos: [],
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+        });
+        mostrarToast(`Mesa "${nombreMesa}" guardada en la lista`, "success");
+    } catch (err) {
+        console.error("Error guardando mesa virtual:", err);
+        mostrarToast("No se pudo guardar la mesa", "error");
+    }
+}
+
+/**
+ * Abre el modal para crear una nueva mesa manualmente.
+ */
+function abrirModalNuevaMesa() {
+    if (!modalMesa || !formMesa) return;
+    formMesa.reset();
+    mesaEditIdInput.value = "";
+
+    const siguienteOrden = todasLasMesas.length + 1;
+    if (modalMesaTitle) modalMesaTitle.textContent = "Crear Nueva Mesa";
+    if (modalMesaSubtitle) modalMesaSubtitle.textContent = "Elige el nombre, su posición en la lista, asientos e invitados previstos.";
+    if (btnGuardarMesaText) btnGuardarMesaText.textContent = "Crear Mesa";
+    if (mesaOrdenInput) mesaOrdenInput.value = String(siguienteOrden);
+    if (mesaCapacidadInput) mesaCapacidadInput.value = "10";
+    if (mesaInvitadosInicialesWrap) mesaInvitadosInicialesWrap.style.display = "block";
+
+    const radioRedonda = document.getElementById("mesa-tipo-redonda");
+    if (radioRedonda) radioRedonda.checked = true;
+
+    modalMesa.classList.add("activo");
+    setTimeout(() => mesaNombreInput && mesaNombreInput.focus(), 120);
+}
+
+/**
+ * Abre el modal para editar los datos de una mesa existente.
+ */
+function abrirModalEditarMesa(mesa) {
+    if (!modalMesa || !formMesa) return;
+    formMesa.reset();
+    mesaEditIdInput.value = mesa.id;
+
+    if (modalMesaTitle) modalMesaTitle.textContent = "Editar Mesa";
+    if (modalMesaSubtitle) modalMesaSubtitle.textContent = `Configurando «${mesa.nombre}»`;
+    if (btnGuardarMesaText) btnGuardarMesaText.textContent = "Guardar Cambios";
+
+    if (mesaNombreInput) mesaNombreInput.value = mesa.nombre;
+    if (mesaOrdenInput) mesaOrdenInput.value = String(mesa.ordenVisual || mesa.orden || 1);
+    if (mesaCapacidadInput) mesaCapacidadInput.value = String(mesa.capacidad || 10);
+    if (mesaNotaInput) mesaNotaInput.value = mesa.nota || "";
+    if (mesaInvitadosInicialesWrap) mesaInvitadosInicialesWrap.style.display = "none";
+
+    const radioTipo = document.getElementById(mesa.tipo === "imperial" ? "mesa-tipo-imperial" : "mesa-tipo-redonda");
+    if (radioTipo) radioTipo.checked = true;
+
+    modalMesa.classList.add("activo");
+}
+
+function cerrarModalMesa() {
+    if (!modalMesa) return;
+    modalMesa.classList.remove("activo");
+}
+
+// Guardar Creación / Edición de Mesa en Firestore
+if (formMesa) {
+    formMesa.addEventListener("submit", async function (e) {
+        e.preventDefault();
+
+        const nombre = (mesaNombreInput ? mesaNombreInput.value : "").trim();
+        if (!nombre) {
+            mostrarToast("Escribe un nombre para la mesa", "error");
+            return;
+        }
+
+        const editId = (mesaEditIdInput ? mesaEditIdInput.value : "").trim();
+        const orden = Math.max(1, parseInt(mesaOrdenInput ? mesaOrdenInput.value : "1", 10) || 1);
+        const capacidad = Math.max(1, Math.min(40, parseInt(mesaCapacidadInput ? mesaCapacidadInput.value : "10", 10) || 10));
+        const tipoChecked = formMesa.querySelector('input[name="mesa-tipo"]:checked');
+        const tipo = tipoChecked && tipoChecked.value === "imperial" ? "imperial" : "redonda";
+        const nota = (mesaNotaInput ? mesaNotaInput.value : "").trim();
+
+        const duplicada = todasLasMesas.find(
+            m => m.id !== editId && normalizarNombrePersona(m.nombre) === normalizarNombrePersona(nombre)
+        );
+        if (duplicada) {
+            mostrarToast(`Ya existe una mesa llamada "${duplicada.nombre}"`, "error");
+            return;
+        }
+
+        const btnGuardar = document.getElementById("btn-guardar-mesa");
+        const originalBtn = btnGuardar ? btnGuardar.innerHTML : "";
+        if (btnGuardar) {
+            btnGuardar.disabled = true;
+            btnGuardar.innerHTML = '<i class="ph ph-spinner icon-pulse"></i> <span>Guardando...</span>';
+        }
+
+        try {
+            const { db, reservasCollection, mesasCollection } = await obtenerFirestore();
+
+            if (editId) {
+                const mesaAnterior = todasLasMesas.find(m => m.id === editId);
+                await updateDoc(doc(db, mesasCollection, editId), {
+                    nombre,
+                    orden,
+                    capacidad,
+                    tipo,
+                    nota,
+                    updatedAt: Date.now()
+                });
+
+                // Si cambió el nombre de la mesa, sincronizar referencias en las reservas asignadas
+                if (mesaAnterior && mesaAnterior.nombre !== nombre) {
+                    const normAntiguo = normalizarNombrePersona(mesaAnterior.nombre);
+                    const promesasReservas = [];
+
+                    todasLasReservas.forEach(r => {
+                        let modificada = false;
+                        const nuevosInv = (r.invitados || []).map(inv => {
+                            if (inv.mesaId === editId || normalizarNombrePersona(inv.mesa) === normAntiguo) {
+                                modificada = true;
+                                return { ...inv, mesa: nombre, mesaId: editId };
+                            }
+                            return inv;
+                        });
+
+                        const nuevasBajas = (r.noAsistenMesas || []).map(b => {
+                            if (b.mesaId === editId || normalizarNombrePersona(b.mesa) === normAntiguo) {
+                                modificada = true;
+                                return { ...b, mesa: nombre, mesaId: editId };
+                            }
+                            return b;
+                        });
+
+                        if (modificada || normalizarNombrePersona(r.mesa) === normAntiguo) {
+                            const nuevoResumen = r.asiste
+                                ? resumirMesasDeInvitados(nuevosInv)
+                                : resumirMesasDeInvitados(nuevasBajas);
+                            promesasReservas.push(
+                                updateDoc(doc(db, reservasCollection, r.id), {
+                                    invitados: nuevosInv,
+                                    noAsistenMesas: nuevasBajas,
+                                    mesa: nuevoResumen,
+                                    updatedAt: Date.now()
+                                })
+                            );
+                        }
+                    });
+
+                    if (promesasReservas.length > 0) {
+                        await Promise.all(promesasReservas);
+                    }
+                }
+
+                mostrarToast(`Mesa "${nombre}" actualizada`, "success");
+            } else {
+                const textoIniciales = mesaInvitadosInicialesInput ? mesaInvitadosInicialesInput.value : "";
+                const nombresVistos = new Set();
+                const miembrosPrevistos = textoIniciales
+                    .split(/[\r\n,;]+/)
+                    .map(s => s.trim())
+                    .filter(s => {
+                        const norm = normalizarNombrePersona(s);
+                        if (!norm || nombresVistos.has(norm)) return false;
+                        nombresVistos.add(norm);
+                        return true;
+                    })
+                    .map(nom => ({ id: generarIdCorto(), nombre: nom }));
+
+                await addDoc(collection(db, mesasCollection), {
+                    nombre,
+                    orden,
+                    capacidad,
+                    tipo,
+                    nota,
+                    miembrosPrevistos,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now()
+                });
+
+                mostrarToast(`Mesa "${nombre}" creada correctamente`, "success");
+            }
+
+            cerrarModalMesa();
+        } catch (err) {
+            console.error("Error guardando mesa:", err);
+            mostrarToast("Error al guardar la mesa en Firestore", "error");
+        } finally {
+            if (btnGuardar) {
+                btnGuardar.disabled = false;
+                btnGuardar.innerHTML = originalBtn;
+            }
+        }
+    });
+}
+
+/**
+ * Elimina una mesa de Firestore previa confirmación (manteniendo intactas las reservas de los invitados).
+ */
+async function confirmarYEliminarMesa(mesa) {
+    const confirmado = await solicitarConfirmacionEliminar(null, {
+        titulo: `¿Eliminar «${mesa.nombre}»?`,
+        htmlTexto: `Se eliminará la mesa <strong>${escaparHTML(mesa.nombre)}</strong> del croquis. Las reservas de los invitados NO se borrarán (quedarán como pendientes de asignar a otra mesa).`
+    });
+    if (!confirmado) return;
+
+    try {
+        const { db, reservasCollection, mesasCollection } = await obtenerFirestore();
+        await deleteDoc(doc(db, mesasCollection, mesa.id));
+
+        // Limpiar asignación en reservas que apuntasen a esta mesa
+        const normNombre = normalizarNombrePersona(mesa.nombre);
+        const actualizaciones = [];
+        todasLasReservas.forEach(r => {
+            let cambio = false;
+            const nuevosInv = (r.invitados || []).map(inv => {
+                if (inv.mesaId === mesa.id || normalizarNombrePersona(inv.mesa) === normNombre) {
+                    cambio = true;
+                    return { ...inv, mesa: "", mesaId: "" };
+                }
+                return inv;
+            });
+            if (cambio || normalizarNombrePersona(r.mesa) === normNombre) {
+                actualizaciones.push(
+                    updateDoc(doc(db, reservasCollection, r.id), {
+                        invitados: nuevosInv,
+                        mesa: resumirMesasDeInvitados(nuevosInv),
+                        updatedAt: Date.now()
+                    })
+                );
+            }
+        });
+
+        if (actualizaciones.length > 0) {
+            await Promise.all(actualizaciones);
+        }
+
+        mostrarToast(`Mesa "${mesa.nombre}" eliminada`, "info");
+    } catch (err) {
+        console.error("Error eliminando mesa:", err);
+        mostrarToast("No se pudo eliminar la mesa", "error");
+    }
+}
+
+/**
+ * Crea en 1 clic una plantilla base de mesas ordenadas (Presidencial + Mesas 1 a 6) para empezar rápido.
+ */
+async function crearPlantillaMesasBase() {
+    if (todasLasMesas.length > 0) return;
+    const base = [
+        { nombre: "Mesa Presidencial", capacidad: 6, tipo: "imperial", nota: "Lorena & Estefanía" },
+        { nombre: "Mesa 1", capacidad: 10, tipo: "redonda", nota: "" },
+        { nombre: "Mesa 2", capacidad: 10, tipo: "redonda", nota: "" },
+        { nombre: "Mesa 3", capacidad: 10, tipo: "redonda", nota: "" },
+        { nombre: "Mesa 4", capacidad: 10, tipo: "redonda", nota: "" },
+        { nombre: "Mesa 5", capacidad: 10, tipo: "redonda", nota: "" },
+        { nombre: "Mesa 6", capacidad: 10, tipo: "redonda", nota: "" }
+    ];
+
+    try {
+        const { db, mesasCollection } = await obtenerFirestore();
+        const ahora = Date.now();
+        await Promise.all(
+            base.map((item, idx) =>
+                addDoc(collection(db, mesasCollection), {
+                    nombre: item.nombre,
+                    orden: idx + 1,
+                    capacidad: item.capacidad,
+                    tipo: item.tipo,
+                    nota: item.nota,
+                    miembrosPrevistos: [],
+                    createdAt: ahora + idx,
+                    updatedAt: ahora + idx
+                })
+            )
+        );
+        mostrarToast("Plantilla de mesas creada. ¡Ya podéis personalizarlas!", "success");
+    } catch (err) {
+        console.error("Error creando plantilla de mesas:", err);
+        mostrarToast("No se pudo crear la plantilla de mesas", "error");
+    }
+}
+
+/**
+ * Exporta en CSV (compatible con Excel España) todas las mesas en orden con el estado de cada asiento
+ * (Confirmado, FALTA POR CONFIRMAR, NO ASISTE) y los pendientes de mesa.
+ */
+function exportarCroquisMesasCSV() {
+    if (!distribucionActual || (distribucionActual.mesas.length === 0 && distribucionActual.pendientesDeMesa.length === 0)) {
+        mostrarToast("Todavía no hay mesas ni invitados para exportar", "info");
+        return;
+    }
+
+    const escaparCSV = (valor) => {
+        const str = String(valor ?? "").replace(/\r?\n/g, " ").trim();
+        return /[;"\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+
+    const filas = [];
+    filas.push([
+        "Orden Mesa",
+        "Mesa",
+        "Estado en Mesa",
+        "Nombre Persona",
+        "Menú",
+        "Alergias / Intolerancias",
+        "Autobús",
+        "Nota Mesa"
+    ].map(escaparCSV).join(";"));
+
+    distribucionActual.mesas.forEach(m => {
+        if (m.asientos.length === 0) {
+            filas.push([m.ordenVisual, m.nombre, "MESA VACÍA", "—", "", "", "", m.nota || ""].map(escaparCSV).join(";"));
+            return;
+        }
+        m.asientos.forEach(a => {
+            const estadoTxt = a.tipoAsiento === "confirmado"
+                ? "Confirmado"
+                : (a.tipoAsiento === "pendiente" ? "FALTA POR CONFIRMAR" : "NO ASISTE");
+            const inv = a.inv || {};
+            const menuTxt = a.tipoAsiento === "confirmado"
+                ? (/ni[ñn]o|beb|infant/i.test(inv.menu || "") ? "Niño" : "Adulto")
+                : "";
+            const alergiaTxt = a.tipoAsiento === "confirmado"
+                ? (inv.tieneAlergia && inv.alergia ? inv.alergia : "Ninguna")
+                : "";
+            const busTxt = a.tipoAsiento === "confirmado"
+                ? (/^s[íi]/i.test(inv.bus || "") ? "SÍ" : "No")
+                : "";
+
+            filas.push([
+                m.ordenVisual,
+                m.nombre,
+                estadoTxt,
+                a.nombre,
+                menuTxt,
+                alergiaTxt,
+                busTxt,
+                m.nota || ""
+            ].map(escaparCSV).join(";"));
+        });
+    });
+
+    if (distribucionActual.pendientesDeMesa.length > 0) {
+        filas.push("");
+        filas.push(["—", "FALTA POR ASIGNAR MESA", "Confirmado (Sin mesa)", "Nombre", "Menú", "Alergias", "Autobús", "Reserva"].map(escaparCSV).join(";"));
+        distribucionActual.pendientesDeMesa.forEach(p => {
+            const esNino = /ni[ñn]o|beb|infant/i.test(p.inv.menu || "");
+            filas.push([
+                "—",
+                "Sin mesa asignada",
+                "Confirmado (Sin mesa)",
+                p.nombre,
+                esNino ? "Niño" : "Adulto",
+                p.inv.tieneAlergia && p.inv.alergia ? p.inv.alergia : "Ninguna",
+                /^s[íi]/i.test(p.inv.bus || "") ? "SÍ" : "No",
+                p.reserva.nombres
+            ].map(escaparCSV).join(";"));
+        });
+    }
+
+    const contenido = "\uFEFF" + filas.join("\r\n");
+    const blob = new Blob([contenido], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const hoy = new Date().toISOString().slice(0, 10);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Mesas_Boda_Lorena_y_Estefania_${hoy}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+    mostrarToast("Distribución de mesas exportada a Excel/CSV", "success");
 }
 
 // ==========================================================================
@@ -2077,6 +4223,35 @@ function normalizarTextoBusqueda(str) {
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .trim();
+}
+
+function normalizarNombrePersona(str) {
+    return String(str || "")
+        .replace(/\[(MODIFICACI[ÓO]N|MANUAL|EDITADO PANEL)\]/gi, "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function dividirNombresPersonas(texto) {
+    return String(texto || "")
+        .replace(/\[(MODIFICACI[ÓO]N|MANUAL|EDITADO PANEL)\]/gi, "")
+        .split(/[,;/+&]|\s+y\s+|\s+e\s+/i)
+        .map(s => s.trim())
+        .filter(Boolean);
+}
+
+function obtenerInicialesPersona(nombre) {
+    const partes = String(nombre || "").trim().split(/\s+/).filter(Boolean);
+    if (partes.length === 0) return "?";
+    if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+    return (partes[0][0] + partes[1][0]).toUpperCase();
+}
+
+function generarIdCorto() {
+    return "mp_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7);
 }
 
 function escaparHTML(str) {
@@ -2120,7 +4295,11 @@ if (btnEntrar) btnEntrar.addEventListener("click", validarCredenciales);
 
 if (btnCerrarPanel) btnCerrarPanel.addEventListener("click", cerrarPanelPrivado);
 
-// Listeners de Buscador en Tiempo Real
+// Listeners de Pestañas Superiores (Reservas vs Distribución de Mesas)
+if (tabVistaReservas) tabVistaReservas.addEventListener("click", () => cambiarVistaPanel("reservas"));
+if (tabVistaMesas) tabVistaMesas.addEventListener("click", () => cambiarVistaPanel("mesas"));
+
+// Listeners de Buscador en Tiempo Real (Vista Reservas)
 if (buscadorReservas) {
     buscadorReservas.addEventListener("input", function () {
         textoBusqueda = this.value;
@@ -2141,7 +4320,7 @@ if (btnClearSearch && buscadorReservas) {
     });
 }
 
-// Listeners de Píldoras de Filtro Rápido
+// Listeners de Píldoras de Filtro Rápido (Vista Reservas)
 if (filtrosContainer) {
     filtrosContainer.querySelectorAll(".app-filter-pill").forEach(btn => {
         btn.addEventListener("click", function () {
@@ -2153,7 +4332,7 @@ if (filtrosContainer) {
     });
 }
 
-// Click en tarjetas KPI con data-quick-filter para filtrar rápidamente (pulsar de nuevo vuelve a "Todos")
+// Click en tarjetas KPI con data-quick-filter para filtrar rápidamente
 document.querySelectorAll(".app-kpi-card[data-quick-filter]").forEach(kpi => {
     kpi.addEventListener("click", function () {
         const targetFilter = this.getAttribute("data-quick-filter");
@@ -2164,7 +4343,7 @@ document.querySelectorAll(".app-kpi-card[data-quick-filter]").forEach(kpi => {
     });
 });
 
-// Selector de filtro por Mesa / Grupo
+// Selector de filtro por Mesa (Vista Reservas)
 if (filtroMesaSelect) {
     filtroMesaSelect.addEventListener("change", function () {
         filtroMesaActivo = this.value || "";
@@ -2176,6 +4355,80 @@ if (filtroMesaSelect) {
 if (btnExportarCatering) {
     btnExportarCatering.addEventListener("click", exportarInformeCatering);
 }
+
+// Listeners de la Vista de Mesas
+if (btnTogglePendientesMesa) {
+    btnTogglePendientesMesa.addEventListener("click", function () {
+        pendientesMesaOculto = !pendientesMesaOculto;
+        if (listaPendientesMesa) {
+            listaPendientesMesa.style.display = pendientesMesaOculto ? "none" : "grid";
+        }
+        if (iconTogglePendientesMesa) {
+            iconTogglePendientesMesa.className = pendientesMesaOculto ? "ph ph-caret-down" : "ph ph-caret-up";
+        }
+        if (textTogglePendientesMesa) {
+            textTogglePendientesMesa.textContent = pendientesMesaOculto ? "Mostrar" : "Ocultar";
+        }
+    });
+}
+
+if (kpiScrollSinMesa) {
+    kpiScrollSinMesa.addEventListener("click", function () {
+        pendientesMesaOculto = false;
+        renderizarVistaMesas();
+        if (panelPendientesMesa) {
+            panelPendientesMesa.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+    });
+}
+
+document.querySelectorAll(".app-kpi-card[data-mesas-filter]").forEach(kpi => {
+    kpi.addEventListener("click", function () {
+        const target = this.getAttribute("data-mesas-filter") || "todas";
+        const next = filtroVistaMesas === target ? "todas" : target;
+        if (filtrosMesasContainer) {
+            const pill = filtrosMesasContainer.querySelector(`[data-mesas-pill="${next}"]`);
+            if (pill) pill.click();
+        }
+    });
+});
+
+if (buscadorMesas) {
+    buscadorMesas.addEventListener("input", function () {
+        textoBusquedaMesas = this.value;
+        if (btnClearMesasSearch) {
+            btnClearMesasSearch.style.display = textoBusquedaMesas.length > 0 ? "flex" : "none";
+        }
+        renderizarVistaMesas();
+    });
+}
+
+if (btnClearMesasSearch && buscadorMesas) {
+    btnClearMesasSearch.addEventListener("click", function () {
+        buscadorMesas.value = "";
+        textoBusquedaMesas = "";
+        btnClearMesasSearch.style.display = "none";
+        buscadorMesas.focus();
+        renderizarVistaMesas();
+    });
+}
+
+if (filtrosMesasContainer) {
+    filtrosMesasContainer.querySelectorAll(".app-filter-pill").forEach(btn => {
+        btn.addEventListener("click", function () {
+            filtrosMesasContainer.querySelectorAll(".app-filter-pill").forEach(b => b.classList.remove("active"));
+            this.classList.add("active");
+            filtroVistaMesas = this.getAttribute("data-mesas-pill") || "todas";
+            renderizarVistaMesas();
+        });
+    });
+}
+
+if (btnNuevaMesa) btnNuevaMesa.addEventListener("click", abrirModalNuevaMesa);
+if (btnExportarMesasCsv) btnExportarMesasCsv.addEventListener("click", exportarCroquisMesasCSV);
+if (modalMesaOverlay) modalMesaOverlay.addEventListener("click", cerrarModalMesa);
+if (btnCerrarModalMesa) btnCerrarModalMesa.addEventListener("click", cerrarModalMesa);
+if (btnCancelarMesa) btnCancelarMesa.addEventListener("click", cerrarModalMesa);
 
 // Mostrar / Ocultar cajón de canciones recomendadas
 const btnToggleCanciones = document.getElementById("btn-toggle-canciones");
@@ -2195,7 +4448,7 @@ if (btnCloseCanciones && cancionesDrawer) {
 }
 
 // Listeners del Modal Manual / Edición
-if (btnNuevaReservaManual) btnNuevaReservaManual.addEventListener("click", abrirModalNuevaManual);
+if (btnNuevaReservaManual) btnNuevaReservaManual.addEventListener("click", () => abrirModalNuevaManual());
 if (modalManualOverlay) modalManualOverlay.addEventListener("click", cerrarModalManual);
 if (btnCerrarManual) btnCerrarManual.addEventListener("click", cerrarModalManual);
 if (btnCancelarManual) btnCancelarManual.addEventListener("click", cerrarModalManual);
@@ -2214,6 +4467,8 @@ document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") {
         if (modalConfirmarEliminar && modalConfirmarEliminar.classList.contains("activo")) {
             cerrarModalConfirmarEliminar(false);
+        } else if (modalMesa && modalMesa.classList.contains("activo")) {
+            cerrarModalMesa();
         } else if (modalReservaManual && modalReservaManual.classList.contains("activo")) {
             cerrarModalManual();
         } else if (modalDetalle && modalDetalle.classList.contains("activo")) {

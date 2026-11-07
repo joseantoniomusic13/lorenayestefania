@@ -18,6 +18,7 @@ module.exports = function handler(req, res) {
     };
 
     const reservasCollection = (process.env.FIREBASE_COLLECTION || "reservas").trim();
+    const mesasCollection = (process.env.FIREBASE_MESAS_COLLECTION || "mesas").trim();
 
     if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
         return res.status(500).json({
@@ -28,6 +29,7 @@ module.exports = function handler(req, res) {
     res.setHeader("Cache-Control", "public, max-age=0, s-maxage=300, stale-while-revalidate=3600");
     return res.status(200).json({
         firebaseConfig,
-        reservasCollection
+        reservasCollection,
+        mesasCollection
     });
 };

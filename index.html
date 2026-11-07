@@ -31,7 +31,7 @@
     <!-- Phosphor Icons (Librería moderna de iconos) -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-    <link rel="stylesheet" href="style.css?v=4">
+    <link rel="stylesheet" href="style.css?v=5">
 </head>
 
 <body>
@@ -489,131 +489,273 @@
             </div>
         </div>
 
+        <!-- Pestañas de Navegación del Wedding Manager -->
+        <div class="app-view-tabs-bar">
+            <div class="app-view-tabs" role="tablist" aria-label="Secciones del panel">
+                <button type="button" class="app-view-tab active" id="tab-vista-reservas" data-view="reservas" role="tab" aria-selected="true">
+                    <i class="ph ph-address-book"></i>
+                    <span>Reservas y Asistentes</span>
+                    <span class="app-tab-badge" id="tab-count-reservas">0</span>
+                </button>
+                <button type="button" class="app-view-tab" id="tab-vista-mesas" data-view="mesas" role="tab" aria-selected="false">
+                    <i class="ph ph-armchair"></i>
+                    <span>Distribución de Mesas</span>
+                    <span class="app-tab-badge badge-pending" id="tab-count-sin-mesa">0 sin mesa</span>
+                </button>
+            </div>
+        </div>
+
         <div class="app-main-container">
-            <!-- Tarjetas KPI / Contadores Globales -->
-            <div id="privado-stats" class="app-kpi-grid" style="display:none;">
-                <div class="app-kpi-card kpi-asisten" data-quick-filter="asisten" title="Filtrar asistentes">
-                    <div class="app-kpi-icon"><i class="ph ph-users-three"></i></div>
-                    <div class="app-kpi-content">
-                        <span id="stat-asisten" class="privado-stat-num">0</span>
-                        <span class="privado-stat-label">Total Asisten</span>
+            <!-- ========================================================
+                 VISTA 1: RESERVAS Y ASISTENTES
+                 ======================================================== -->
+            <div id="vista-reservas" class="app-view-panel">
+                <!-- Tarjetas KPI / Contadores Globales -->
+                <div id="privado-stats" class="app-kpi-grid" style="display:none;">
+                    <div class="app-kpi-card kpi-asisten" data-quick-filter="asisten" title="Filtrar asistentes">
+                        <div class="app-kpi-icon"><i class="ph ph-users-three"></i></div>
+                        <div class="app-kpi-content">
+                            <span id="stat-asisten" class="privado-stat-num">0</span>
+                            <span class="privado-stat-label">Total Asisten</span>
+                        </div>
+                    </div>
+
+                    <div class="app-kpi-card kpi-adultos" data-quick-filter="adultos" title="Filtrar reservas con menú adulto">
+                        <div class="app-kpi-icon"><i class="ph ph-fork-knife"></i></div>
+                        <div class="app-kpi-content">
+                            <span id="stat-adultos" class="privado-stat-num">0</span>
+                            <span class="privado-stat-label">Menú Adulto</span>
+                        </div>
+                    </div>
+
+                    <div class="app-kpi-card kpi-ninos" data-quick-filter="ninos" title="Filtrar reservas con menú niño">
+                        <div class="app-kpi-icon"><i class="ph ph-baby"></i></div>
+                        <div class="app-kpi-content">
+                            <span id="stat-ninos" class="privado-stat-num">0</span>
+                            <span class="privado-stat-label">Menú Niño</span>
+                        </div>
+                    </div>
+
+                    <div class="app-kpi-card kpi-alergias" data-quick-filter="alergia" title="Filtrar invitados con alergias">
+                        <div class="app-kpi-icon"><i class="ph ph-warning-octagon"></i></div>
+                        <div class="app-kpi-content">
+                            <span id="stat-con-alergia" class="privado-stat-num">0</span>
+                            <span class="privado-stat-label">Alergias <small style="display:none;">(<span id="stat-sin-alergia">0</span> sin)</small></span>
+                        </div>
+                    </div>
+
+                    <div class="app-kpi-card kpi-bus" data-quick-filter="bus" title="Filtrar plazas de autobús">
+                        <div class="app-kpi-icon"><i class="ph ph-bus"></i></div>
+                        <div class="app-kpi-content">
+                            <span id="stat-bus" class="privado-stat-num">0</span>
+                            <span class="privado-stat-label">Plazas Bus</span>
+                        </div>
+                    </div>
+
+                    <div class="app-kpi-card kpi-canciones clicks-allowed" id="btn-toggle-canciones" title="Ver playlist de canciones sugeridas">
+                        <div class="app-kpi-icon"><i class="ph ph-music-notes-plus"></i></div>
+                        <div class="app-kpi-content">
+                            <span id="count-canciones" class="privado-stat-num">0</span>
+                            <span class="privado-stat-label">Canciones DJ <i class="ph ph-caret-down"></i></span>
+                        </div>
                     </div>
                 </div>
 
-                <div class="app-kpi-card kpi-adultos" data-quick-filter="adultos" title="Filtrar reservas con menú adulto">
-                    <div class="app-kpi-icon"><i class="ph ph-fork-knife"></i></div>
-                    <div class="app-kpi-content">
-                        <span id="stat-adultos" class="privado-stat-num">0</span>
-                        <span class="privado-stat-label">Menú Adulto</span>
+                <!-- Panel Desplegable de Canciones Recomendadas -->
+                <div id="canciones-drawer" class="app-songs-drawer" style="display:none;">
+                    <div class="app-songs-drawer-header">
+                        <h3><i class="ph ph-vinyl-record"></i> Playlist sugerida por los invitados</h3>
+                        <button type="button" id="btn-close-canciones" class="app-btn-icon"><i class="ph ph-x"></i></button>
                     </div>
+                    <ul id="lista-canciones" class="lista-canciones"></ul>
                 </div>
 
-                <div class="app-kpi-card kpi-ninos" data-quick-filter="ninos" title="Filtrar reservas con menú niño">
-                    <div class="app-kpi-icon"><i class="ph ph-baby"></i></div>
-                    <div class="app-kpi-content">
-                        <span id="stat-ninos" class="privado-stat-num">0</span>
-                        <span class="privado-stat-label">Menú Niño</span>
+                <!-- Barra de Herramientas: Buscador en tiempo real + Filtros rápidos -->
+                <div class="app-toolbar">
+                    <div class="app-toolbar-top">
+                        <div class="app-search-box">
+                            <i class="ph ph-magnifying-glass"></i>
+                            <input type="text" id="buscador-reservas" placeholder="Buscar por invitado, mesa, alergia, teléfono, nota, canción..." autocomplete="off">
+                            <button type="button" id="btn-clear-search" class="app-search-clear" style="display:none;" aria-label="Limpiar búsqueda">
+                                <i class="ph ph-x-circle"></i>
+                            </button>
+                        </div>
+
+                        <div class="app-mesa-filter-box">
+                            <i class="ph ph-armchair"></i>
+                            <select id="filtro-mesa-select" class="app-mesa-select" aria-label="Filtrar por mesa o grupo">
+                                <option value="">Todas las mesas</option>
+                                <option value="__SIN_MESA__">🪑 Con invitados sin mesa</option>
+                            </select>
+                        </div>
                     </div>
-                </div>
 
-                <div class="app-kpi-card kpi-alergias" data-quick-filter="alergia" title="Filtrar invitados con alergias">
-                    <div class="app-kpi-icon"><i class="ph ph-warning-octagon"></i></div>
-                    <div class="app-kpi-content">
-                        <span id="stat-con-alergia" class="privado-stat-num">0</span>
-                        <span class="privado-stat-label">Alergias <small style="display:none;">(<span id="stat-sin-alergia">0</span> sin)</small></span>
-                    </div>
-                </div>
-
-                <div class="app-kpi-card kpi-bus" data-quick-filter="bus" title="Filtrar plazas de autobús">
-                    <div class="app-kpi-icon"><i class="ph ph-bus"></i></div>
-                    <div class="app-kpi-content">
-                        <span id="stat-bus" class="privado-stat-num">0</span>
-                        <span class="privado-stat-label">Plazas Bus</span>
-                    </div>
-                </div>
-
-                <div class="app-kpi-card kpi-canciones clicks-allowed" id="btn-toggle-canciones" title="Ver playlist de canciones sugeridas">
-                    <div class="app-kpi-icon"><i class="ph ph-music-notes-plus"></i></div>
-                    <div class="app-kpi-content">
-                        <span id="count-canciones" class="privado-stat-num">0</span>
-                        <span class="privado-stat-label">Canciones DJ <i class="ph ph-caret-down"></i></span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Panel Desplegable de Canciones Recomendadas -->
-            <div id="canciones-drawer" class="app-songs-drawer" style="display:none;">
-                <div class="app-songs-drawer-header">
-                    <h3><i class="ph ph-vinyl-record"></i> Playlist sugerida por los invitados</h3>
-                    <button type="button" id="btn-close-canciones" class="app-btn-icon"><i class="ph ph-x"></i></button>
-                </div>
-                <ul id="lista-canciones" class="lista-canciones"></ul>
-            </div>
-
-            <!-- Barra de Herramientas: Buscador en tiempo real + Filtros rápidos -->
-            <div class="app-toolbar">
-                <div class="app-toolbar-top">
-                    <div class="app-search-box">
-                        <i class="ph ph-magnifying-glass"></i>
-                        <input type="text" id="buscador-reservas" placeholder="Buscar por invitado, mesa, alergia, teléfono, nota, canción..." autocomplete="off">
-                        <button type="button" id="btn-clear-search" class="app-search-clear" style="display:none;" aria-label="Limpiar búsqueda">
-                            <i class="ph ph-x-circle"></i>
+                    <div class="app-filter-pills" id="filtros-reservas">
+                        <button type="button" class="app-filter-pill active" data-filter="todos">
+                            <i class="ph ph-squares-four"></i> Todos <span class="pill-count" id="pill-count-todos">0</span>
+                        </button>
+                        <button type="button" class="app-filter-pill" data-filter="asisten">
+                            <i class="ph ph-check-circle"></i> Asisten <span class="pill-count" id="pill-count-asisten">0</span>
+                        </button>
+                        <button type="button" class="app-filter-pill" data-filter="no-asisten">
+                            <i class="ph ph-x-circle"></i> No asisten <span class="pill-count" id="pill-count-no-asisten">0</span>
+                        </button>
+                        <button type="button" class="app-filter-pill" data-filter="adultos">
+                            <i class="ph ph-fork-knife"></i> Menú adulto <span class="pill-count" id="pill-count-adultos">0</span>
+                        </button>
+                        <button type="button" class="app-filter-pill" data-filter="ninos">
+                            <i class="ph ph-baby"></i> Con niños <span class="pill-count" id="pill-count-ninos">0</span>
+                        </button>
+                        <button type="button" class="app-filter-pill" data-filter="alergia">
+                            <i class="ph ph-warning-circle"></i> Con alergia <span class="pill-count" id="pill-count-alergia">0</span>
+                        </button>
+                        <button type="button" class="app-filter-pill" data-filter="bus">
+                            <i class="ph ph-bus"></i> Con bus <span class="pill-count" id="pill-count-bus">0</span>
                         </button>
                     </div>
+                </div>
 
-                    <div class="app-mesa-filter-box">
-                        <i class="ph ph-armchair"></i>
-                        <select id="filtro-mesa-select" class="app-mesa-select" aria-label="Filtrar por mesa o grupo">
-                            <option value="">Todas las mesas / grupos</option>
-                            <option value="__SIN_MESA__">🪑 Sin mesa asignada</option>
-                        </select>
+                <!-- Info de resultados filtrados -->
+                <div class="app-results-bar">
+                    <span id="app-results-count">Cargando confirmaciones...</span>
+                </div>
+
+                <!-- Indicador de carga -->
+                <div id="privado-loading" class="privado-loading">
+                    <div class="privado-spinner"></div>
+                    <p>Sincronizando reservas con Firebase Firestore…</p>
+                </div>
+
+                <!-- Mensaje de error de carga -->
+                <div id="privado-error" class="privado-error-msg" style="display:none;">
+                    <i class="ph ph-warning-circle"></i>
+                    <p>No se pudieron cargar los datos de Firestore.</p>
+                </div>
+
+                <!-- Grid de Tarjetas de Reservas -->
+                <div id="privado-cards" class="app-reservas-grid"></div>
+            </div>
+
+            <!-- ========================================================
+                 VISTA 2: DISTRIBUCIÓN VISUAL Y MANUAL DE MESAS
+                 ======================================================== -->
+            <div id="vista-mesas" class="app-view-panel" style="display:none;">
+                <!-- Contadores de Mesas y Estados de Confirmación -->
+                <div class="mesas-kpi-grid">
+                    <div class="app-kpi-card kpi-mesas-total" data-mesas-filter="todas" title="Ver todas las mesas">
+                        <div class="app-kpi-icon"><i class="ph ph-armchair"></i></div>
+                        <div class="app-kpi-content">
+                            <span id="stat-mesas-creadas" class="privado-stat-num">0</span>
+                            <span class="privado-stat-label">Mesas Creadas</span>
+                        </div>
+                    </div>
+
+                    <div class="app-kpi-card kpi-mesas-confirmados" data-mesas-filter="todas" title="Invitados sentados con asistencia confirmada">
+                        <div class="app-kpi-icon"><i class="ph ph-check-circle"></i></div>
+                        <div class="app-kpi-content">
+                            <span id="stat-mesas-confirmados" class="privado-stat-num">0</span>
+                            <span class="privado-stat-label">Confirmados en Mesa</span>
+                        </div>
+                    </div>
+
+                    <div class="app-kpi-card kpi-mesas-pendientes" data-mesas-filter="con-pendientes" title="Filtrar mesas con personas que faltan por confirmar">
+                        <div class="app-kpi-icon"><i class="ph ph-hourglass-medium"></i></div>
+                        <div class="app-kpi-content">
+                            <span id="stat-mesas-pendientes" class="privado-stat-num">0</span>
+                            <span class="privado-stat-label">Falta por Confirmar</span>
+                        </div>
+                    </div>
+
+                    <div class="app-kpi-card kpi-mesas-bajas" data-mesas-filter="con-bajas" title="Filtrar mesas con personas que han indicado No Asiste">
+                        <div class="app-kpi-icon"><i class="ph ph-x-circle"></i></div>
+                        <div class="app-kpi-content">
+                            <span id="stat-mesas-no-asisten" class="privado-stat-num">0</span>
+                            <span class="privado-stat-label">No Asisten</span>
+                        </div>
+                    </div>
+
+                    <div class="app-kpi-card kpi-mesas-sin-asignar" id="kpi-scroll-sin-mesa" title="Ir a invitados confirmados que aún no tienen mesa">
+                        <div class="app-kpi-icon"><i class="ph ph-user-circle-plus"></i></div>
+                        <div class="app-kpi-content">
+                            <span id="stat-mesas-sin-asignar" class="privado-stat-num">0</span>
+                            <span class="privado-stat-label">Confirmados Sin Mesa</span>
+                        </div>
                     </div>
                 </div>
 
-                <div class="app-filter-pills" id="filtros-reservas">
-                    <button type="button" class="app-filter-pill active" data-filter="todos">
-                        <i class="ph ph-squares-four"></i> Todos <span class="pill-count" id="pill-count-todos">0</span>
-                    </button>
-                    <button type="button" class="app-filter-pill" data-filter="asisten">
-                        <i class="ph ph-check-circle"></i> Asisten <span class="pill-count" id="pill-count-asisten">0</span>
-                    </button>
-                    <button type="button" class="app-filter-pill" data-filter="no-asisten">
-                        <i class="ph ph-x-circle"></i> No asisten <span class="pill-count" id="pill-count-no-asisten">0</span>
-                    </button>
-                    <button type="button" class="app-filter-pill" data-filter="adultos">
-                        <i class="ph ph-fork-knife"></i> Menú adulto <span class="pill-count" id="pill-count-adultos">0</span>
-                    </button>
-                    <button type="button" class="app-filter-pill" data-filter="ninos">
-                        <i class="ph ph-baby"></i> Con niños <span class="pill-count" id="pill-count-ninos">0</span>
-                    </button>
-                    <button type="button" class="app-filter-pill" data-filter="alergia">
-                        <i class="ph ph-warning-circle"></i> Con alergia <span class="pill-count" id="pill-count-alergia">0</span>
-                    </button>
-                    <button type="button" class="app-filter-pill" data-filter="bus">
-                        <i class="ph ph-bus"></i> Con bus <span class="pill-count" id="pill-count-bus">0</span>
-                    </button>
+                <!-- Panel de quién falta por asignarse en mesa -->
+                <div id="panel-pendientes-mesa" class="pendientes-mesa-panel">
+                    <div class="pendientes-mesa-header">
+                        <div class="pendientes-mesa-title">
+                            <i class="ph ph-users-four"></i>
+                            <div>
+                                <h3>¿Quién falta por asignarse en mesa?</h3>
+                                <p>Invitados que ya han confirmado su asistencia pero aún no tienen mesa asignada.</p>
+                            </div>
+                            <span class="pendientes-count-pill" id="badge-pendientes-mesa">0</span>
+                        </div>
+                        <button type="button" id="btn-toggle-pendientes-mesa" class="app-btn app-btn-secondary btn-sm">
+                            <i class="ph ph-caret-up" id="icon-toggle-pendientes-mesa"></i>
+                            <span id="text-toggle-pendientes-mesa">Ocultar</span>
+                        </button>
+                    </div>
+                    <div id="lista-pendientes-mesa" class="pendientes-mesa-grid"></div>
                 </div>
-            </div>
 
-            <!-- Info de resultados filtrados -->
-            <div class="app-results-bar">
-                <span id="app-results-count">Cargando confirmaciones...</span>
-            </div>
+                <!-- Barra de herramientas y creación de Mesas -->
+                <div class="app-toolbar mesas-toolbar">
+                    <div class="app-toolbar-top">
+                        <div class="app-search-box">
+                            <i class="ph ph-magnifying-glass"></i>
+                            <input type="text" id="buscador-mesas" placeholder="Buscar mesa o persona asignada en el salón..." autocomplete="off">
+                            <button type="button" id="btn-clear-mesas-search" class="app-search-clear" style="display:none;" aria-label="Limpiar búsqueda de mesas">
+                                <i class="ph ph-x-circle"></i>
+                            </button>
+                        </div>
 
-            <!-- Indicador de carga -->
-            <div id="privado-loading" class="privado-loading">
-                <div class="privado-spinner"></div>
-                <p>Sincronizando reservas con Firebase Firestore…</p>
-            </div>
+                        <div class="mesas-toolbar-actions">
+                            <button type="button" id="btn-exportar-mesas-csv" class="app-btn app-btn-export" title="Descargar listado completo de mesas y estados para Excel">
+                                <i class="ph ph-file-xls"></i>
+                                <span>Exportar Mesas</span>
+                            </button>
+                            <button type="button" id="btn-nueva-mesa" class="app-btn app-btn-primary">
+                                <i class="ph ph-plus-circle"></i>
+                                <span>Crear Nueva Mesa</span>
+                            </button>
+                        </div>
+                    </div>
 
-            <!-- Mensaje de error de carga -->
-            <div id="privado-error" class="privado-error-msg" style="display:none;">
-                <i class="ph ph-warning-circle"></i>
-                <p>No se pudieron cargar los datos de Firestore.</p>
-            </div>
+                    <div class="mesas-toolbar-bottom">
+                        <div class="app-filter-pills" id="filtros-mesas">
+                            <button type="button" class="app-filter-pill active" data-mesas-pill="todas">
+                                <i class="ph ph-squares-four"></i> Todas
+                            </button>
+                            <button type="button" class="app-filter-pill" data-mesas-pill="con-huecos">
+                                <i class="ph ph-armchair"></i> Con huecos libres
+                            </button>
+                            <button type="button" class="app-filter-pill" data-mesas-pill="completas">
+                                <i class="ph ph-check-fat"></i> Completas
+                            </button>
+                            <button type="button" class="app-filter-pill" data-mesas-pill="con-pendientes">
+                                <i class="ph ph-hourglass-medium"></i> Con falta por confirmar
+                            </button>
+                            <button type="button" class="app-filter-pill" data-mesas-pill="con-bajas">
+                                <i class="ph ph-user-minus"></i> Con bajas (No asiste)
+                            </button>
+                        </div>
 
-            <!-- Grid de Tarjetas de Reservas -->
-            <div id="privado-cards" class="app-reservas-grid"></div>
+                        <div class="mesas-legend">
+                            <span class="legend-item"><span class="legend-dot dot-confirmado"></span> Confirmado</span>
+                            <span class="legend-item"><span class="legend-dot dot-pendiente"></span> Falta por confirmar</span>
+                            <span class="legend-item"><span class="legend-dot dot-baja"></span> No asiste</span>
+                            <span class="legend-item"><span class="legend-dot dot-libre"></span> Sitio libre</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Grid Visual del Salón de Mesas -->
+                <div id="mesas-grid" class="mesas-visual-grid"></div>
+            </div>
         </div>
     </section>
 
@@ -712,33 +854,14 @@
                     </div>
                 </div>
 
-                <!-- Sección exclusiva de Organización Interna (Mesas / Notas Privadas) -->
+                <!-- Sección exclusiva de Organización Interna (Notas Privadas) -->
                 <div class="app-form-section app-org-internal-section">
-                    <label class="app-form-label" for="manual-mesa">
-                        <i class="ph ph-armchair"></i> Organización Interna: Mesa / Grupo y Notas Privadas
+                    <label class="app-form-label" for="manual-notas-internas">
+                        <i class="ph ph-note-pencil"></i> Organización Interna: Notas Privadas
                     </label>
-                    <div class="input-group" style="margin-bottom: 12px;">
-                        <i class="ph ph-armchair"></i>
-                        <input type="text" id="manual-mesa" name="manual-mesa" list="lista-mesas-sugeridas"
-                            placeholder="Asignar mesa o grupo (ej: Mesa 1, Familia Lorena, Amigos...)">
-                        <datalist id="lista-mesas-sugeridas">
-                            <option value="Mesa Presidencial"></option>
-                            <option value="Familia Lorena"></option>
-                            <option value="Familia Estefanía"></option>
-                            <option value="Amigos"></option>
-                            <option value="Compañeros"></option>
-                            <option value="Mesa 1"></option>
-                            <option value="Mesa 2"></option>
-                            <option value="Mesa 3"></option>
-                            <option value="Mesa 4"></option>
-                            <option value="Mesa 5"></option>
-                            <option value="Mesa 6"></option>
-                            <option value="Mesa 7"></option>
-                            <option value="Mesa 8"></option>
-                            <option value="Mesa 9"></option>
-                            <option value="Mesa 10"></option>
-                        </datalist>
-                    </div>
+                    <p class="app-org-hint">
+                        <i class="ph ph-armchair"></i> La mesa se asigna de forma individual arriba en cada invitado (por si van en mesas distintas).
+                    </p>
                     <div class="input-group textarea-group" style="margin-bottom: 0;">
                         <i class="ph ph-note-pencil"></i>
                         <textarea id="manual-notas-internas" name="manual-notas-internas" rows="2"
@@ -760,6 +883,111 @@
     </div>
 
     <!-- ============================================================
+         MODAL CREAR / EDITAR MESA MANUALMENTE
+         ============================================================ -->
+    <div id="modal-mesa" class="modal-privado modal-detalle" role="dialog" aria-modal="true">
+        <div class="modal-privado-overlay" id="modal-mesa-overlay"></div>
+        <div class="modal-detalle-box app-modal-form-box app-modal-mesa-box">
+            <button class="modal-privado-close" id="btn-cerrar-modal-mesa" aria-label="Cerrar">
+                <i class="ph ph-x"></i>
+            </button>
+
+            <div class="app-modal-header">
+                <div class="app-modal-icon">
+                    <i class="ph ph-armchair"></i>
+                </div>
+                <div>
+                    <h2 id="modal-mesa-title">Crear Nueva Mesa</h2>
+                    <p id="modal-mesa-subtitle">Define el nombre, orden, número de asientos e invitados previstos.</p>
+                </div>
+            </div>
+
+            <form id="form-mesa" class="app-modal-body">
+                <input type="hidden" id="mesa-edit-id" value="">
+
+                <div class="app-form-section">
+                    <label class="app-form-label" for="mesa-nombre-input">
+                        <i class="ph ph-tag"></i> Nombre de la mesa
+                    </label>
+                    <div class="input-group" style="margin-bottom: 14px;">
+                        <i class="ph ph-armchair"></i>
+                        <input type="text" id="mesa-nombre-input" required
+                            placeholder="Ej: Mesa Presidencial, Mesa 1 - Familia Lorena, Amigos...">
+                    </div>
+
+                    <div class="mesa-form-two-cols">
+                        <div>
+                            <label class="app-form-label" for="mesa-orden-input">
+                                <i class="ph ph-list-numbers"></i> Orden en la lista
+                            </label>
+                            <div class="input-group" style="margin-bottom: 0;">
+                                <i class="ph ph-hash"></i>
+                                <input type="number" id="mesa-orden-input" min="1" max="200" value="1" required>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="app-form-label" for="mesa-capacidad-input">
+                                <i class="ph ph-users-three"></i> Nº de sillas / plazas
+                            </label>
+                            <div class="input-group" style="margin-bottom: 0;">
+                                <i class="ph ph-users"></i>
+                                <input type="number" id="mesa-capacidad-input" min="1" max="40" value="10" required>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="app-form-section">
+                    <label class="app-form-label">
+                        <i class="ph ph-shapes"></i> Forma visual de la mesa
+                    </label>
+                    <div class="radio-group" style="margin-bottom: 14px;">
+                        <input type="radio" name="mesa-tipo" id="mesa-tipo-redonda" value="redonda" class="hidden-radio" checked>
+                        <label class="radio-btn" for="mesa-tipo-redonda">⭕ Mesa Redonda</label>
+
+                        <input type="radio" name="mesa-tipo" id="mesa-tipo-imperial" value="imperial" class="hidden-radio">
+                        <label class="radio-btn" for="mesa-tipo-imperial">▭ Imperial / Presidencial</label>
+                    </div>
+
+                    <label class="app-form-label" for="mesa-nota-input">
+                        <i class="ph ph-map-pin-line"></i> Nota o ubicación en el salón (Opcional)
+                    </label>
+                    <div class="input-group" style="margin-bottom: 0;">
+                        <i class="ph ph-note"></i>
+                        <input type="text" id="mesa-nota-input"
+                            placeholder="Ej: Junto a las novias, cerca de pista de baile, 1 trona...">
+                    </div>
+                </div>
+
+                <div class="app-form-section" id="mesa-invitados-iniciales-wrap">
+                    <label class="app-form-label" for="mesa-invitados-iniciales">
+                        <i class="ph ph-user-list"></i> Invitados previstos en esta mesa (Opcional)
+                    </label>
+                    <p class="app-org-hint" style="margin-bottom: 10px;">
+                        Escribe un nombre por línea (o separados por comas). Aparecerán como <strong>FALTA POR CONFIRMAR</strong> hasta que llegue su reserva (o pasarán automáticamente a <strong>Confirmado</strong> / <strong>NO ASISTE</strong> si ya respondieron).
+                    </p>
+                    <div class="input-group textarea-group" style="margin-bottom: 0;">
+                        <i class="ph ph-users"></i>
+                        <textarea id="mesa-invitados-iniciales" rows="4"
+                            placeholder="Ej:&#10;María López García&#10;Antonio Ruiz&#10;Elena Morales"></textarea>
+                    </div>
+                </div>
+
+                <div class="app-modal-footer">
+                    <button type="button" id="btn-cancelar-mesa" class="app-btn app-btn-secondary">
+                        Cancelar
+                    </button>
+                    <button type="submit" id="btn-guardar-mesa" class="app-btn app-btn-primary">
+                        <i class="ph ph-floppy-disk"></i>
+                        <span id="btn-guardar-mesa-text">Guardar Mesa</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================================================
          MODAL DE CONFIRMACIÓN DE ELIMINACIÓN
          ============================================================ -->
     <div id="modal-confirmar-eliminar" class="modal-privado" role="dialog" aria-modal="true">
@@ -768,7 +996,7 @@
             <div class="modal-privado-icon delete-icon-wrap">
                 <i class="ph ph-trash"></i>
             </div>
-            <h3>¿Eliminar esta reserva?</h3>
+            <h3 id="confirmar-eliminar-titulo">¿Eliminar esta reserva?</h3>
             <p id="confirmar-eliminar-texto">Se borrará permanentemente de Firestore y del Excel de Google Sheets.</p>
             <div class="app-confirm-delete-actions">
                 <button type="button" id="btn-cancelar-eliminar" class="app-btn app-btn-secondary">
@@ -794,7 +1022,7 @@
     </audio>
 
     <!-- Inicialización de Firebase v13.2.0 + Lógica de la aplicación -->
-    <script type="module" src="script.js?v=7"></script>
+    <script type="module" src="script.js?v=8"></script>
 
 </body>
 

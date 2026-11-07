@@ -1,0 +1,12 @@
+# Variables de entorno locales (NUNCA subir a Git)
+.env
+.env.local
+.env.*.local
+
+# Vercel y dependencias
+.vercel
+node_modules/
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db

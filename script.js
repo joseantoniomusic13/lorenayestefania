@@ -14,33 +14,112 @@ import {
     onSnapshot
 } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
 
-const firebaseConfig = {
-    apiKey: "AIzaSyDez5fOu1r2UzFQH5MydHtfPePOynvZ7YE",
-    authDomain: "bodalorenaestefania.firebaseapp.com",
-    projectId: "bodalorenaestefania",
-    storageBucket: "bodalorenaestefania.firebasestorage.app",
-    messagingSenderId: "1075448030707",
-    appId: "1:1075448030707:web:eedd01905a292075905e86",
-    measurementId: "G-GV6KMR6PGJ"
-};
+const esEntornoLocal = () =>
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1" ||
+    window.location.hostname === "[::1]" ||
+    window.location.protocol === "file:";
 
-// Inicializar Firebase, Analytics y Firestore
-const app = initializeApp(firebaseConfig);
-let analytics = null;
-try {
-    analytics = getAnalytics(app);
-} catch (e) {
-    console.warn("Firebase Analytics no disponible en este entorno:", e);
+let envLocalCache = null;
+
+/**
+ * Fallback exclusivo para servidores estáticos locales (p. ej. VS Code Live Server)
+ * cuando no se está ejecutando `vercel dev` ni `node dev-server.js`.
+ */
+async function cargarEnvLocalFallback() {
+    if (!esEntornoLocal()) return null;
+    if (envLocalCache) return envLocalCache;
+
+    try {
+        const res = await fetch("./.env.local", { cache: "no-store" });
+        if (!res.ok) return null;
+        const text = await res.text();
+        const parsed = {};
+        text.split(/\r?\n/).forEach(rawLine => {
+            const line = rawLine.trim();
+            if (!line || line.startsWith("#")) return;
+            const eqIdx = line.indexOf("=");
+            if (eqIdx === -1) return;
+            const key = line.slice(0, eqIdx).trim();
+            let val = line.slice(eqIdx + 1).trim();
+            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                val = val.slice(1, -1);
+            }
+            parsed[key] = val;
+        });
+        envLocalCache = parsed;
+        return parsed;
+    } catch (e) {
+        return null;
+    }
 }
-const db = getFirestore(app);
-const RESERVAS_COLLECTION = "reservas";
 
-// URL del Google Apps Script (espejo a Google Sheets y bot de Telegram)
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwaNl2tW2rvJfIWDRasLJ6qeywPFXokROdwseyD1EXqAdQQu44Nu6yjt9lUXNjQ3bQZ/exec";
+let firestoreInstance = null;
+let firestoreInitPromise = null;
 
-// Credenciales del Panel Privado de Organizadoras
-const USUARIO_PRIVADO = "kukitas";
-const CONTRASENA_PRIVADA = "Clm";
+/**
+ * Obtiene la instancia de Firestore cargando las variables de entorno desde `/api/config` en Vercel
+ * (o `.env.local` en desarrollo estático local).
+ */
+async function obtenerFirestore() {
+    if (firestoreInstance) return firestoreInstance;
+    if (firestoreInitPromise) return firestoreInitPromise;
+
+    firestoreInitPromise = (async () => {
+        try {
+            let firebaseConfig = null;
+            let reservasCollection = "reservas";
+
+            const res = await fetch("/api/config");
+            const contentType = res.headers.get("content-type") || "";
+
+            if (res.ok && contentType.includes("application/json")) {
+                const data = await res.json();
+                firebaseConfig = data.firebaseConfig;
+                reservasCollection = data.reservasCollection || "reservas";
+            } else if (esEntornoLocal()) {
+                const localEnv = await cargarEnvLocalFallback();
+                if (localEnv && localEnv.FIREBASE_API_KEY) {
+                    firebaseConfig = {
+                        apiKey: localEnv.FIREBASE_API_KEY,
+                        authDomain: localEnv.FIREBASE_AUTH_DOMAIN || "",
+                        projectId: localEnv.FIREBASE_PROJECT_ID || "",
+                        storageBucket: localEnv.FIREBASE_STORAGE_BUCKET || "",
+                        messagingSenderId: localEnv.FIREBASE_MESSAGING_SENDER_ID || "",
+                        appId: localEnv.FIREBASE_APP_ID || "",
+                        measurementId: localEnv.FIREBASE_MEASUREMENT_ID || ""
+                    };
+                    reservasCollection = localEnv.FIREBASE_COLLECTION || "reservas";
+                }
+            }
+
+            if (!firebaseConfig || !firebaseConfig.apiKey || !firebaseConfig.projectId) {
+                throw new Error("Configuración de Firebase no disponible. Revisa las variables de entorno en Vercel o .env.local.");
+            }
+
+            const app = initializeApp(firebaseConfig);
+            try {
+                getAnalytics(app);
+            } catch (e) {
+                console.warn("Firebase Analytics no disponible en este entorno:", e);
+            }
+
+            const db = getFirestore(app);
+            firestoreInstance = { db, reservasCollection };
+            return firestoreInstance;
+        } catch (err) {
+            firestoreInitPromise = null;
+            throw err;
+        }
+    })();
+
+    return firestoreInitPromise;
+}
+
+// Pre-inicializar en segundo plano sin bloquear la interfaz
+obtenerFirestore().catch(err => {
+    console.warn("Aviso inicializando Firebase:", err.message);
+});
 
 // ==========================================================================
 // 2. CUENTA ATRÁS Y FUNCIONES DE LA WEB PÚBLICA
@@ -381,30 +460,87 @@ function construirDatosReserva(formElement, countVal, prefix = "public", origen 
 }
 
 /**
- * Envía copia espejo a Google Sheets (mantiene respaldo y bot de Telegram).
+ * Envía copia espejo a Google Sheets (mantiene respaldo y bot de Telegram) a través de `/api/sheets`.
  */
-function enviarEspejoGoogleSheets(reservaObj, prefijoTag = "") {
-    if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL === "URL_DE_TU_SCRIPT_AQUI") {
-        return Promise.resolve();
-    }
-
+async function enviarEspejoGoogleSheets(reservaObj, prefijoTag = "", meta = {}) {
     const payload = {
+        accion: meta.accion || "guardar",
+        id: meta.id || "",
         asistencia: reservaObj.asistencia,
         numero_invitados: String(reservaObj.numero_invitados),
         nombres: prefijoTag ? `${prefijoTag} ${reservaObj.nombres}` : reservaObj.nombres,
+        nombres_original: meta.nombresOriginal || reservaObj.nombres || "",
         detalles: reservaObj.detalles
     };
 
-    return fetch(GOOGLE_SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: {
-            "Content-Type": "text/plain"
-        },
-        body: JSON.stringify(payload)
-    }).catch(err => {
+    try {
+        const res = await fetch("/api/sheets", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        // Fallback exclusivo si se abre en local con un servidor estático (sin servidor API)
+        const contentType = res.headers.get("content-type") || "";
+        if ((!res.ok || !contentType.includes("application/json")) && esEntornoLocal()) {
+            const localEnv = await cargarEnvLocalFallback();
+            if (localEnv && localEnv.GOOGLE_SCRIPT_URL) {
+                await fetch(localEnv.GOOGLE_SCRIPT_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "text/plain" },
+                    body: JSON.stringify(payload)
+                });
+            }
+        }
+    } catch (err) {
         console.warn("Aviso: No se pudo sincronizar con Google Sheets:", err);
-    });
+    }
+}
+
+/**
+ * Solicita eliminar la fila correspondiente en Google Sheets a través de `/api/sheets`.
+ */
+async function eliminarDeGoogleSheets(reserva) {
+    const payload = {
+        accion: "eliminar",
+        id: reserva.id || "",
+        nombres: reserva.nombres || "",
+        nombres_original: reserva.nombresRaw || reserva.nombres || ""
+    };
+
+    try {
+        const res = await fetch("/api/sheets", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const contentType = res.headers.get("content-type") || "";
+        if (res.ok && contentType.includes("application/json")) {
+            return await res.json();
+        }
+
+        // Fallback exclusivo si se abre en local con un servidor estático (sin servidor API)
+        if (esEntornoLocal()) {
+            const localEnv = await cargarEnvLocalFallback();
+            if (localEnv && localEnv.GOOGLE_SCRIPT_URL) {
+                await fetch(localEnv.GOOGLE_SCRIPT_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "text/plain" },
+                    body: JSON.stringify(payload)
+                });
+            }
+        }
+    } catch (err) {
+        console.warn("Aviso: No se pudo eliminar la fila en Google Sheets:", err);
+    }
+    return null;
 }
 
 if (rsvpForm) {
@@ -427,24 +563,32 @@ if (rsvpForm) {
         const existingDocId = localStorage.getItem("wedding_rsvp_doc_id");
 
         try {
+            const { db, reservasCollection } = await obtenerFirestore();
+
             // 1. Guardar en Firebase Firestore (colección "reservas")
+            let savedDocId = existingDocId || "";
             if (isModificacion && existingDocId) {
                 try {
-                    await updateDoc(doc(db, RESERVAS_COLLECTION, existingDocId), reservaData);
+                    await updateDoc(doc(db, reservasCollection, existingDocId), reservaData);
                 } catch (updateErr) {
                     // Si el documento fue eliminado por las organizadoras, creamos uno nuevo
                     reservaData.createdAt = Date.now();
-                    const newDoc = await addDoc(collection(db, RESERVAS_COLLECTION), reservaData);
+                    const newDoc = await addDoc(collection(db, reservasCollection), reservaData);
+                    savedDocId = newDoc.id;
                     localStorage.setItem("wedding_rsvp_doc_id", newDoc.id);
                 }
             } else {
                 reservaData.createdAt = Date.now();
-                const docRef = await addDoc(collection(db, RESERVAS_COLLECTION), reservaData);
+                const docRef = await addDoc(collection(db, reservasCollection), reservaData);
+                savedDocId = docRef.id;
                 localStorage.setItem("wedding_rsvp_doc_id", docRef.id);
             }
 
             // 2. Enviar en paralelo espejo a Google Sheets (respaldo + bot Telegram)
-            await enviarEspejoGoogleSheets(reservaData, isModificacion ? "[MODIFICACIÓN]" : "");
+            await enviarEspejoGoogleSheets(reservaData, isModificacion ? "[MODIFICACIÓN]" : "", {
+                accion: isModificacion ? "actualizar" : "crear",
+                id: savedDocId
+            });
 
             // 3. Guardar en localStorage para recordar en el navegador del invitado
             localStorage.setItem("wedding_rsvp_status", "confirmed");
@@ -614,26 +758,17 @@ function cerrarModal() {
     }
 }
 
-/** Valida Usuario (kukitas) y Contraseña (Clm) */
-function validarCredenciales() {
+/** Valida las credenciales del Área Privada contra `/api/auth` en Vercel */
+async function validarCredenciales() {
     if (!inputUsuario || !inputPassword) return;
     const usuarioVal = inputUsuario.value.trim();
     const passVal = inputPassword.value.trim();
 
-    const usuarioCorrecto = usuarioVal.toLowerCase() === USUARIO_PRIVADO.toLowerCase();
-    const passCorrecta = passVal === CONTRASENA_PRIVADA;
-
-    if (usuarioCorrecto && passCorrecta) {
-        mostrarPanelPrivado();
-    } else {
+    const mostrarFalloLogin = (mensaje) => {
         if (modalErrorMsg) {
             modalErrorMsg.style.display = "flex";
             if (modalErrorText) {
-                if (!usuarioVal || !passVal) {
-                    modalErrorText.textContent = "Por favor, introduce tanto el usuario como la contraseña.";
-                } else {
-                    modalErrorText.textContent = "Usuario o contraseña incorrectos. Inténtalo de nuevo.";
-                }
+                modalErrorText.textContent = mensaje;
             }
         }
         [inputUsuario, inputPassword].forEach(inp => {
@@ -644,12 +779,68 @@ function validarCredenciales() {
                 inp.style.boxShadow = "";
             }, 1500);
         });
-        if (!usuarioCorrecto) {
+        if (!usuarioVal) {
             inputUsuario.focus();
-            inputUsuario.select();
         } else {
             inputPassword.focus();
             inputPassword.select();
+        }
+    };
+
+    if (!usuarioVal || !passVal) {
+        mostrarFalloLogin("Por favor, introduce tanto el usuario como la contraseña.");
+        return;
+    }
+
+    const originalBtnHTML = btnEntrar ? btnEntrar.innerHTML : "";
+    if (btnEntrar) {
+        btnEntrar.disabled = true;
+        btnEntrar.innerHTML = 'Verificando... <i class="ph ph-spinner icon-pulse"></i>';
+    }
+
+    try {
+        const res = await fetch("/api/auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ usuario: usuarioVal, password: passVal })
+        });
+        const contentType = res.headers.get("content-type") || "";
+
+        if (contentType.includes("application/json")) {
+            const data = await res.json();
+            if (res.ok && data.ok) {
+                mostrarPanelPrivado();
+                return;
+            }
+            mostrarFalloLogin(data.error || "Usuario o contraseña incorrectos. Inténtalo de nuevo.");
+            return;
+        }
+
+        // Fallback exclusivo para desarrollo estático local (p. ej. VS Code Live Server)
+        if (esEntornoLocal()) {
+            const localEnv = await cargarEnvLocalFallback();
+            const expectedUser = (localEnv && (localEnv.USUARIO_PRIVADO || localEnv.ADMIN_USER)) || "";
+            const expectedPass = (localEnv && (localEnv.CONTRASENA_PRIVADA || localEnv.ADMIN_PASSWORD)) || "";
+            if (
+                expectedUser &&
+                expectedPass &&
+                usuarioVal.toLowerCase() === expectedUser.toLowerCase() &&
+                passVal === expectedPass
+            ) {
+                mostrarPanelPrivado();
+                return;
+            }
+            mostrarFalloLogin("Usuario o contraseña incorrectos. Inténtalo de nuevo.");
+            return;
+        }
+
+        mostrarFalloLogin("No se pudo conectar con el servidor de autenticación.");
+    } catch (err) {
+        mostrarFalloLogin("Error de conexión al verificar credenciales.");
+    } finally {
+        if (btnEntrar) {
+            btnEntrar.disabled = false;
+            btnEntrar.innerHTML = originalBtnHTML;
         }
     }
 }
@@ -755,10 +946,10 @@ function normalizarReserva(id, data) {
         }
     }
 
-    const nombresLimpio = String(data.nombres || data.nombre || "")
-        .replace("[MODIFICACIÓN]", "")
-        .replace("[MANUAL]", "")
-        .trim() || "Sin nombre";
+    const rawNombres = String(data.nombres || data.nombre || "").trim();
+    const nombresLimpio = rawNombres
+        .replace(/\[(MODIFICACI[ÓO]N|MANUAL|EDITADO PANEL)\]/gi, "")
+        .trim() || (invitados.length > 0 ? invitados.map(i => i.nombre).filter(Boolean).join(", ") : "Sin nombre");
 
     return {
         id,
@@ -766,6 +957,7 @@ function normalizarReserva(id, data) {
         asiste,
         numero_invitados: numInvitados,
         nombres: nombresLimpio,
+        nombresRaw: rawNombres,
         invitados,
         detalles: detallesTexto,
         cancion,
@@ -786,7 +978,7 @@ function normalizarReserva(id, data) {
 /**
  * Conecta en tiempo real a la colección "reservas" de Firestore.
  */
-function iniciarEscuchaReservas() {
+async function iniciarEscuchaReservas() {
     if (!privadoLoading || !privadoCards) return;
 
     if (unsubscribeFirestore) {
@@ -801,7 +993,10 @@ function iniciarEscuchaReservas() {
     const syncText = document.getElementById("sync-status-text");
 
     try {
-        const colRef = collection(db, RESERVAS_COLLECTION);
+        const { db, reservasCollection } = await obtenerFirestore();
+        if (!document.body.classList.contains("app-privada-activa")) return;
+
+        const colRef = collection(db, reservasCollection);
         unsubscribeFirestore = onSnapshot(colRef, (snapshot) => {
             privadoLoading.style.display = "none";
             privadoError.style.display = "none";
@@ -1231,26 +1426,39 @@ if (manualForm) {
 
         // Mantener el origen original si se está editando, o "manual" si es nueva
         let origenReserva = "manual";
+        let nombresOriginal = "";
         if (esEdicion) {
             const existente = todasLasReservas.find(r => r.id === editId);
-            if (existente && existente.origen) origenReserva = existente.origen;
+            if (existente) {
+                if (existente.origen) origenReserva = existente.origen;
+                nombresOriginal = existente.nombres || "";
+            }
         }
 
         const reservaObj = construirDatosReserva(manualForm, countVal, "manual", origenReserva);
 
         try {
+            const { db, reservasCollection } = await obtenerFirestore();
+
             if (esEdicion) {
                 // Actualizar documento existente en Firestore
-                await updateDoc(doc(db, RESERVAS_COLLECTION, editId), reservaObj);
+                await updateDoc(doc(db, reservasCollection, editId), reservaObj);
                 // Sincronizar cambio con Google Sheets
-                enviarEspejoGoogleSheets(reservaObj, "[EDITADO PANEL]");
+                enviarEspejoGoogleSheets(reservaObj, "[EDITADO PANEL]", {
+                    accion: "actualizar",
+                    id: editId,
+                    nombresOriginal
+                });
                 mostrarToast(`Reserva de ${reservaObj.nombres} actualizada correctamente`, "success");
             } else {
                 // Crear nuevo documento en Firestore
                 reservaObj.createdAt = Date.now();
-                await addDoc(collection(db, RESERVAS_COLLECTION), reservaObj);
+                const docRef = await addDoc(collection(db, reservasCollection), reservaObj);
                 // Sincronizar nueva reserva con Google Sheets y Telegram
-                enviarEspejoGoogleSheets(reservaObj, "[MANUAL]");
+                enviarEspejoGoogleSheets(reservaObj, "[MANUAL]", {
+                    accion: "crear",
+                    id: docRef.id
+                });
                 mostrarToast(`Invitación de ${reservaObj.nombres} creada y sincronizada`, "success");
             }
 
@@ -1266,18 +1474,20 @@ if (manualForm) {
 }
 
 /**
- * Elimina una reserva de Firestore previa confirmación.
+ * Elimina una reserva de Firestore y de Google Sheets previa confirmación.
  */
 async function confirmarYEliminarReserva(reserva) {
     const confirmado = window.confirm(
-        `¿Seguro que deseas ELIMINAR definitivamente la reserva de "${reserva.nombres}"?\n\nEsta acción borrará la reserva de Firebase Firestore y actualizará los contadores al instante.`
+        `¿Seguro que deseas ELIMINAR definitivamente la reserva de "${reserva.nombres}"?\n\nEsta acción borrará la reserva de Firebase Firestore y del Excel (Google Sheets), actualizando los contadores al instante.`
     );
     if (!confirmado) return;
 
     try {
-        await deleteDoc(doc(db, RESERVAS_COLLECTION, reserva.id));
+        const { db, reservasCollection } = await obtenerFirestore();
+        await deleteDoc(doc(db, reservasCollection, reserva.id));
         cerrarModalDetalle();
         mostrarToast(`Reserva de ${reserva.nombres} eliminada`, "info");
+        await eliminarDeGoogleSheets(reserva);
     } catch (error) {
         console.error("Error al eliminar reserva de Firestore:", error);
         mostrarToast("No se pudo eliminar la reserva de Firestore.", "error");

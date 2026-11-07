@@ -1132,7 +1132,6 @@ const tabCountSinMesa = document.getElementById("tab-count-sin-mesa");
 
 // Modal de Gestión Manual / Edición
 const btnNuevaReservaManual = document.getElementById("btn-nueva-reserva-manual");
-const btnTopbarPdfCatering = document.getElementById("btn-topbar-pdf-catering");
 const btnExportarCatering = document.getElementById("btn-exportar-catering");
 const filtroMesaSelect = document.getElementById("filtro-mesa-select");
 const modalReservaManual = document.getElementById("modal-reserva-manual");
@@ -5660,12 +5659,7 @@ if (filtroMesaSelect) {
     });
 }
 
-// Botones superiores de exportación para Catering (PDF y Excel/CSV)
-if (btnTopbarPdfCatering) {
-    btnTopbarPdfCatering.addEventListener("click", function () {
-        exportarMesasConMenusPDF(this);
-    });
-}
+// Botón superior de exportación para Catering (Excel/CSV)
 if (btnExportarCatering) {
     btnExportarCatering.addEventListener("click", exportarInformeCatering);
 }

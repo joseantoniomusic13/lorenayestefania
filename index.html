@@ -31,7 +31,7 @@
     <!-- Phosphor Icons (Librería moderna de iconos) -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-    <link rel="stylesheet" href="style.css?v=6">
+    <link rel="stylesheet" href="style.css?v=7">
 </head>
 
 <body>
@@ -474,9 +474,13 @@
                 </div>
             </div>
             <div class="app-topbar-actions">
+                <button type="button" id="btn-topbar-pdf-catering" class="app-btn app-btn-pdf-catering" title="Descargar informe PDF de Mesas con Menús y Alergias para entregar al Catering">
+                    <i class="ph ph-file-pdf"></i>
+                    <span>PDF Catering</span>
+                </button>
                 <button type="button" id="btn-exportar-catering" class="app-btn app-btn-export" title="Descargar informe Excel/CSV para Catering y Autobuses">
                     <i class="ph ph-file-xls"></i>
-                    <span>Exportar Catering</span>
+                    <span>Excel Catering</span>
                 </button>
                 <button type="button" id="btn-nueva-reserva-manual" class="app-btn app-btn-primary">
                     <i class="ph ph-user-plus"></i>
@@ -714,9 +718,17 @@
                         </div>
 
                         <div class="mesas-toolbar-actions">
+                            <button type="button" id="btn-exportar-mesas-pdf" class="app-btn app-btn-pdf" title="Descargar plano visual y listado de mesas en PDF (Protocolo)">
+                                <i class="ph ph-file-pdf"></i>
+                                <span>PDF Mesas</span>
+                            </button>
+                            <button type="button" id="btn-exportar-mesas-menus-pdf" class="app-btn app-btn-pdf-catering" title="Descargar mesas con menús, niños y alergias en PDF para entregar al catering">
+                                <i class="ph ph-fork-knife"></i>
+                                <span>PDF Mesas + Menús</span>
+                            </button>
                             <button type="button" id="btn-exportar-mesas-csv" class="app-btn app-btn-export" title="Descargar listado completo de mesas y estados para Excel">
                                 <i class="ph ph-file-xls"></i>
-                                <span>Exportar Mesas</span>
+                                <span>Excel</span>
                             </button>
                             <button type="button" id="btn-nueva-mesa" class="app-btn app-btn-primary">
                                 <i class="ph ph-plus-circle"></i>
@@ -1022,7 +1034,7 @@
     </audio>
 
     <!-- Inicialización de Firebase v13.2.0 + Lógica de la aplicación -->
-    <script type="module" src="script.js?v=9"></script>
+    <script type="module" src="script.js?v=10"></script>
 
 </body>
 

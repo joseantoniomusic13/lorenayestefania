@@ -1132,6 +1132,7 @@ const tabCountSinMesa = document.getElementById("tab-count-sin-mesa");
 
 // Modal de Gestión Manual / Edición
 const btnNuevaReservaManual = document.getElementById("btn-nueva-reserva-manual");
+const btnTopbarPdfCatering = document.getElementById("btn-topbar-pdf-catering");
 const btnExportarCatering = document.getElementById("btn-exportar-catering");
 const filtroMesaSelect = document.getElementById("filtro-mesa-select");
 const modalReservaManual = document.getElementById("modal-reserva-manual");
@@ -1164,6 +1165,8 @@ const buscadorMesas = document.getElementById("buscador-mesas");
 const btnClearMesasSearch = document.getElementById("btn-clear-mesas-search");
 const filtrosMesasContainer = document.getElementById("filtros-mesas");
 const btnNuevaMesa = document.getElementById("btn-nueva-mesa");
+const btnExportarMesasPdf = document.getElementById("btn-exportar-mesas-pdf");
+const btnExportarMesasMenusPdf = document.getElementById("btn-exportar-mesas-menus-pdf");
 const btnExportarMesasCsv = document.getElementById("btn-exportar-mesas-csv");
 const mesasGrid = document.getElementById("mesas-grid");
 
@@ -4387,6 +4390,1119 @@ function exportarCroquisMesasCSV() {
 }
 
 // ==========================================================================
+// 8C. EXPORTACIÓN EN PDF: CROQUIS DE MESAS Y DOSSIER CON MENÚS PARA CATERING
+// ==========================================================================
+
+let promesaLibreriasPDF = null;
+
+function cargarScriptExterno(url) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = url;
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error(`No se pudo cargar ${url}`));
+        document.head.appendChild(script);
+    });
+}
+
+/**
+ * Carga bajo demanda jsPDF + jspdf-autotable con fallback entre CDNs para no penalizar la web pública.
+ */
+async function cargarLibreriasPDF() {
+    if (window.jspdf && window.jspdf.jsPDF && (window.jspdf.jsPDF.API.autoTable || window.jspdf.autoTable)) {
+        return window.jspdf.jsPDF;
+    }
+
+    if (!promesaLibreriasPDF) {
+        promesaLibreriasPDF = (async () => {
+            if (!window.jspdf || !window.jspdf.jsPDF) {
+                try {
+                    await cargarScriptExterno("https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js");
+                } catch (_) {
+                    await cargarScriptExterno("https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js");
+                }
+            }
+
+            if (window.jspdf && window.jspdf.jsPDF && !window.jsPDF) {
+                window.jsPDF = window.jspdf.jsPDF;
+            }
+
+            const tieneAutoTable = window.jspdf && (window.jspdf.jsPDF.API.autoTable || window.jspdf.autoTable);
+            if (!tieneAutoTable) {
+                try {
+                    await cargarScriptExterno("https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js");
+                } catch (_) {
+                    await cargarScriptExterno("https://unpkg.com/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js");
+                }
+            }
+
+            if (!window.jspdf || !window.jspdf.jsPDF) {
+                throw new Error("jsPDF no disponible");
+            }
+            return window.jspdf.jsPDF;
+        })().catch(err => {
+            promesaLibreriasPDF = null;
+            throw err;
+        });
+    }
+
+    return promesaLibreriasPDF;
+}
+
+/**
+ * Limpia texto para codificación estándar Latin-1 / WinAnsi de jsPDF conservando 100 % acentos españoles y ñ.
+ */
+function limpiarTextoPDF(valor) {
+    if (valor === null || valor === undefined) return "";
+    return String(valor)
+        .replace(/\r?\n/g, " ")
+        .replace(/[\u2013\u2014]/g, "-")
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u201C\u201D]/g, '"')
+        .replace(/\u2026/g, "...")
+        .replace(/\u2022/g, "·")
+        .replace(/\u20AC/g, "EUR")
+        .replace(/[^\u0020-\u007E\u00A1-\u00FF]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function ejecutarAutoTablePDF(doc, opciones) {
+    if (typeof doc.autoTable === "function") {
+        doc.autoTable(opciones);
+    } else if (window.jspdf && typeof window.jspdf.autoTable === "function") {
+        window.jspdf.autoTable(doc, opciones);
+    } else {
+        throw new Error("Plugin autoTable no disponible");
+    }
+}
+
+/**
+ * Estructura todos los datos de mesas, comensales, menús, alergias y pendientes para ambos informes PDF.
+ */
+function prepararDatosExportacionMesas(distribucion = distribucionActual) {
+    if (!distribucion) return null;
+
+    const ordenPrioridad = { "confirmado": 1, "pendiente": 2, "no-asiste": 3 };
+    const alergiasDetalle = [];
+
+    let confirmadosEnMesas = 0;
+    let pendientesConfirmarEnMesas = 0;
+    let adultosEnMesas = 0;
+    let ninosEnMesas = 0;
+    let alergiasEnMesas = 0;
+
+    const mesasDetalle = distribucion.mesas.map(m => {
+        const asientosActivos = m.asientos
+            .filter(a => a.tipoAsiento === "confirmado" || a.tipoAsiento === "pendiente")
+            .sort((a, b) => (ordenPrioridad[a.tipoAsiento] || 9) - (ordenPrioridad[b.tipoAsiento] || 9));
+
+        let confirmadosMesa = 0;
+        let pendientesMesa = 0;
+        let adultosMesa = 0;
+        let ninosMesa = 0;
+        let alergiasMesa = 0;
+
+        const comensales = asientosActivos.map((a, idx) => {
+            const silla = idx + 1;
+            const nombreMostrar = a.aliasMesa ? `${a.nombre} («${a.aliasMesa}»)` : a.nombre;
+
+            if (a.tipoAsiento === "confirmado") {
+                confirmadosMesa++;
+                confirmadosEnMesas++;
+
+                if (a.esReserva) {
+                    const inv = a.inv || {};
+                    const esNino = /ni[ñn]o|beb|infant/i.test(inv.menu || "");
+                    if (esNino) {
+                        ninosMesa++;
+                        ninosEnMesas++;
+                    } else {
+                        adultosMesa++;
+                        adultosEnMesas++;
+                    }
+
+                    const alergiaRaw = String(inv.alergia || "").trim();
+                    const tieneAlergia = Boolean(inv.tieneAlergia) && !/^(ninguna?|no|—|-|)$/i.test(alergiaRaw);
+                    const alergiaEtiqueta = tieneAlergia ? alergiaRaw : "Ninguna";
+                    const observaciones = a.reserva && a.reserva.observaciones
+                        ? String(a.reserva.observaciones).trim()
+                        : "";
+
+                    if (tieneAlergia) {
+                        alergiasMesa++;
+                        alergiasEnMesas++;
+                        alergiasDetalle.push({
+                            mesaNombre: `${m.ordenVisual}. ${m.nombre}`,
+                            silla: String(silla),
+                            nombre: nombreMostrar,
+                            menuEtiqueta: esNino ? "Infantil (Niño)" : "Adulto",
+                            alergia: alergiaRaw,
+                            observaciones
+                        });
+                    }
+
+                    return {
+                        silla,
+                        nombre: nombreMostrar,
+                        tipoAsiento: "confirmado",
+                        estadoEtiqueta: "Confirmado",
+                        menuCategoria: esNino ? "nino" : "adulto",
+                        menuEtiqueta: esNino ? "Infantil (Niño)" : "Adulto",
+                        tieneAlergia,
+                        alergiaEtiqueta,
+                        observaciones
+                    };
+                }
+
+                // Confirmado manualmente en mesa por las novias sin ficha de reserva
+                adultosMesa++;
+                adultosEnMesas++;
+                return {
+                    silla,
+                    nombre: nombreMostrar,
+                    tipoAsiento: "confirmado",
+                    estadoEtiqueta: "Confirmado",
+                    menuCategoria: "adulto",
+                    menuEtiqueta: "Adulto",
+                    tieneAlergia: false,
+                    alergiaEtiqueta: "Ninguna",
+                    observaciones: ""
+                };
+            }
+
+            // Pendiente ("FALTA POR CONFIRMAR")
+            pendientesMesa++;
+            pendientesConfirmarEnMesas++;
+            return {
+                silla,
+                nombre: nombreMostrar,
+                tipoAsiento: "pendiente",
+                estadoEtiqueta: "Falta confirmar",
+                menuCategoria: "pendiente",
+                menuEtiqueta: "Sin confirmar",
+                tieneAlergia: false,
+                alergiaEtiqueta: "-",
+                observaciones: ""
+            };
+        });
+
+        return {
+            id: m.id,
+            ordenVisual: m.ordenVisual,
+            nombre: m.nombre,
+            tipo: m.tipo === "imperial" ? "imperial" : "redonda",
+            formaEtiqueta: m.tipo === "imperial" ? "Imperial" : "Redonda",
+            capacidad: m.capacidad,
+            nota: m.nota || "",
+            ocupadosActivos: asientosActivos.length,
+            huecosLibres: Math.max(0, m.capacidad - asientosActivos.length),
+            confirmadosMesa,
+            pendientesMesa,
+            adultosMesa,
+            ninosMesa,
+            alergiasMesa,
+            comensales
+        };
+    });
+
+    let adultosSinMesa = 0;
+    let ninosSinMesa = 0;
+    let alergiasSinMesa = 0;
+
+    const pendientesSinMesa = (distribucion.pendientesDeMesa || []).map(p => {
+        const inv = p.inv || {};
+        const esNino = /ni[ñn]o|beb|infant/i.test(inv.menu || "");
+        if (esNino) ninosSinMesa++;
+        else adultosSinMesa++;
+
+        const alergiaRaw = String(inv.alergia || "").trim();
+        const tieneAlergia = Boolean(inv.tieneAlergia) && !/^(ninguna?|no|—|-|)$/i.test(alergiaRaw);
+        const observaciones = p.reserva && p.reserva.observaciones
+            ? String(p.reserva.observaciones).trim()
+            : "";
+
+        if (tieneAlergia) {
+            alergiasSinMesa++;
+            alergiasDetalle.push({
+                mesaNombre: "Sin mesa asignada",
+                silla: "-",
+                nombre: p.nombre,
+                menuEtiqueta: esNino ? "Infantil (Niño)" : "Adulto",
+                alergia: alergiaRaw,
+                observaciones
+            });
+        }
+
+        return {
+            nombre: p.nombre,
+            grupoReserva: (p.reserva && p.reserva.nombres) || "",
+            menuCategoria: esNino ? "nino" : "adulto",
+            menuEtiqueta: esNino ? "Infantil (Niño)" : "Adulto",
+            tieneAlergia,
+            alergiaEtiqueta: tieneAlergia ? alergiaRaw : "Ninguna",
+            observaciones
+        };
+    });
+
+    return {
+        mesas: mesasDetalle,
+        pendientesSinMesa,
+        alergiasDetalle,
+        resumen: {
+            totalMesas: mesasDetalle.length,
+            confirmadosEnMesas,
+            pendientesConfirmarEnMesas,
+            totalActivosEnMesas: confirmadosEnMesas + pendientesConfirmarEnMesas,
+            adultosEnMesas,
+            ninosEnMesas,
+            alergiasEnMesas,
+            sinMesaCount: pendientesSinMesa.length,
+            confirmadosGlobal: confirmadosEnMesas + pendientesSinMesa.length,
+            adultosGlobal: adultosEnMesas + adultosSinMesa,
+            ninosGlobal: ninosEnMesas + ninosSinMesa,
+            alergiasGlobal: alergiasEnMesas + alergiasSinMesa
+        }
+    };
+}
+
+function dibujarCabeceraPDF(doc, tituloPrincipal, subtituloExtra) {
+    const fechaGen = new Date().toLocaleString("es-ES", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+
+    // Banda superior burdeos elegante
+    doc.setFillColor(131, 52, 65);
+    doc.rect(0, 0, 210, 28, "F");
+
+    // Línea fina decorativa inferior
+    doc.setFillColor(212, 175, 55);
+    doc.rect(0, 28, 210, 1.2, "F");
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text(limpiarTextoPDF(tituloPrincipal), 14, 12);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.8);
+    doc.setTextColor(252, 231, 235);
+    doc.text(
+        limpiarTextoPDF("Boda Lorena & Estefanía · 15 de Mayo de 2027 · Jardines Pilar de la Dehesa (Lucena, Córdoba)"),
+        14,
+        18.5
+    );
+
+    doc.setFontSize(8);
+    doc.setTextColor(241, 218, 223);
+    doc.text(limpiarTextoPDF(`${subtituloExtra} · Generado: ${fechaGen}`), 14, 24);
+
+    return 35;
+}
+
+function dibujarTarjetasKPIPDF(doc, tarjetas, startY) {
+    const margenX = 14;
+    const anchoTotal = 182;
+    const gap = 3.5;
+    const n = tarjetas.length;
+    const cardW = (anchoTotal - gap * (n - 1)) / n;
+    const cardH = 17;
+
+    tarjetas.forEach((t, idx) => {
+        const x = margenX + idx * (cardW + gap);
+        const esAlerta = Boolean(t.alerta);
+
+        if (esAlerta) {
+            doc.setFillColor(254, 242, 242);
+            doc.setDrawColor(252, 165, 165);
+        } else {
+            doc.setFillColor(248, 250, 252);
+            doc.setDrawColor(226, 232, 240);
+        }
+        doc.roundedRect(x, startY, cardW, cardH, 2.2, 2.2, "FD");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(13);
+        if (esAlerta) doc.setTextColor(185, 28, 28);
+        else if (t.destacar) doc.setTextColor(131, 52, 65);
+        else doc.setTextColor(15, 23, 42);
+        doc.text(limpiarTextoPDF(String(t.valor)), x + cardW / 2, startY + 7.8, { align: "center" });
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(6.6);
+        doc.setTextColor(71, 85, 105);
+        doc.text(limpiarTextoPDF(t.etiqueta), x + cardW / 2, startY + 12.6, { align: "center" });
+
+        if (t.sub) {
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(5.8);
+            doc.setTextColor(100, 116, 139);
+            doc.text(limpiarTextoPDF(t.sub), x + cardW / 2, startY + 15.6, { align: "center" });
+        }
+    });
+
+    return startY + cardH + 6;
+}
+
+/**
+ * Dibuja en el PDF el croquis vectorial de la mesa (redonda o imperial) con sus sillas numeradas y coloreadas.
+ */
+function dibujarCroquisVectorialMesaPDF(doc, mesa, x, y, boxW, boxH) {
+    doc.setFillColor(253, 248, 249);
+    doc.setDrawColor(241, 222, 226);
+    doc.roundedRect(x, y, boxW, boxH, 2.5, 2.5, "FD");
+
+    const cx = x + boxW / 2;
+    const cy = y + boxH / 2;
+    const totalSillas = Math.min(Math.max(mesa.capacidad, mesa.comensales.length), 16);
+
+    const dibujarSilla = (sx, sy, idx, radio) => {
+        const comensal = mesa.comensales[idx];
+        if (comensal && comensal.tipoAsiento === "confirmado") {
+            doc.setFillColor(16, 185, 129);
+            doc.setDrawColor(5, 150, 105);
+            doc.setTextColor(255, 255, 255);
+        } else if (comensal && comensal.tipoAsiento === "pendiente") {
+            doc.setFillColor(245, 158, 11);
+            doc.setDrawColor(217, 119, 6);
+            doc.setTextColor(255, 255, 255);
+        } else {
+            doc.setFillColor(241, 245, 249);
+            doc.setDrawColor(203, 213, 225);
+            doc.setTextColor(100, 116, 139);
+        }
+
+        doc.circle(sx, sy, radio, "FD");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(radio < 2.3 ? 4.8 : 5.6);
+        doc.text(String(idx + 1), sx, sy + (radio < 2.3 ? 0.65 : 0.8), { align: "center" });
+    };
+
+    if (mesa.tipo === "imperial") {
+        const rectW = 32;
+        const rectH = 11;
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(131, 52, 65);
+        doc.setLineWidth(0.45);
+        doc.roundedRect(cx - rectW / 2, cy - rectH / 2, rectW, rectH, 2, 2, "FD");
+        doc.setLineWidth(0.2);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
+        doc.setTextColor(15, 23, 42);
+        doc.text(`${mesa.confirmadosMesa}/${mesa.capacidad}`, cx, cy - 0.3, { align: "center" });
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(5);
+        doc.setTextColor(131, 52, 65);
+        doc.text("CONFIRMADOS", cx, cy + 3.2, { align: "center" });
+
+        const mitadArriba = Math.ceil(totalSillas / 2);
+        const mitadAbajo = totalSillas - mitadArriba;
+        const radioImp = totalSillas > 12 ? 2.0 : 2.35;
+
+        for (let i = 0; i < mitadArriba; i++) {
+            const paso = rectW / (mitadArriba + 1);
+            const sx = (cx - rectW / 2) + paso * (i + 1);
+            dibujarSilla(sx, cy - rectH / 2 - 3.6, i, radioImp);
+        }
+        for (let j = 0; j < mitadAbajo; j++) {
+            const paso = rectW / (mitadAbajo + 1);
+            const sx = (cx - rectW / 2) + paso * (j + 1);
+            dibujarSilla(sx, cy + rectH / 2 + 3.6, mitadArriba + j, radioImp);
+        }
+        return;
+    }
+
+    // Mesa Redonda
+    const tableR = 9.2;
+    const orbitR = 14.8;
+    const chairR = totalSillas > 12 ? 2.05 : 2.45;
+
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(131, 52, 65);
+    doc.setLineWidth(0.45);
+    doc.circle(cx, cy, tableR, "FD");
+    doc.setLineWidth(0.2);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.8);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${mesa.confirmadosMesa}/${mesa.capacidad}`, cx, cy - 0.3, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(4.8);
+    doc.setTextColor(131, 52, 65);
+    doc.text("CONFIRMADOS", cx, cy + 3.1, { align: "center" });
+
+    for (let i = 0; i < totalSillas; i++) {
+        const ang = (2 * Math.PI * i) / totalSillas - Math.PI / 2;
+        const sx = cx + orbitR * Math.cos(ang);
+        const sy = cy + orbitR * Math.sin(ang);
+        dibujarSilla(sx, sy, i, chairR);
+    }
+}
+
+function numerarPaginasPDF(doc, textoIzquierda) {
+    const totalPaginas = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= totalPaginas; p++) {
+        doc.setPage(p);
+        doc.setDrawColor(226, 232, 240);
+        doc.line(14, 286, 196, 286);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text(limpiarTextoPDF(textoIzquierda), 14, 291);
+        doc.text(`Página ${p} de ${totalPaginas}`, 196, 291, { align: "right" });
+    }
+}
+
+/**
+ * Fallback de impresión nativa del navegador por si se abre sin conexión a internet y sin caché de CDN.
+ */
+function imprimirFallbackPDF(tituloDocumento, datos, incluirMenus) {
+    const ventana = window.open("", "_blank");
+    if (!ventana) {
+        mostrarToast("Permite ventanas emergentes para generar el PDF", "error");
+        return;
+    }
+
+    const bloquesMesas = datos.mesas.map(m => {
+        const filas = m.comensales.length === 0
+            ? `<tr><td colspan="${incluirMenus ? 5 : 3}" style="color:#64748b;text-align:center;">Mesa vacía</td></tr>`
+            : m.comensales.map(c => incluirMenus
+                ? `<tr>
+                    <td style="text-align:center;font-weight:700;">${c.silla}</td>
+                    <td>${escaparHTML(c.nombre)}</td>
+                    <td>${escaparHTML(c.estadoEtiqueta)}</td>
+                    <td style="font-weight:600;">${escaparHTML(c.menuEtiqueta)}</td>
+                    <td style="${c.tieneAlergia ? "color:#b91c1c;font-weight:700;" : ""}">${escaparHTML(c.alergiaEtiqueta)}${c.observaciones ? " · " + escaparHTML(c.observaciones) : ""}</td>
+                   </tr>`
+                : `<tr>
+                    <td style="text-align:center;font-weight:700;">${c.silla}</td>
+                    <td>${escaparHTML(c.nombre)}</td>
+                    <td>${escaparHTML(c.estadoEtiqueta)}</td>
+                   </tr>`
+            ).join("");
+
+        return `
+            <div class="mesa-block">
+                <div class="mesa-head">
+                    <strong>#${m.ordenVisual} · ${escaparHTML(m.nombre)}</strong>
+                    <span>${escaparHTML(m.formaEtiqueta)} · ${m.confirmadosMesa}/${m.capacidad} confirmados${incluirMenus ? ` · Adultos: ${m.adultosMesa} · Niños: ${m.ninosMesa} · Alergias: ${m.alergiasMesa}` : ""}</span>
+                </div>
+                ${m.nota ? `<div class="mesa-note">Nota: ${escaparHTML(m.nota)}</div>` : ""}
+                <table>
+                    <thead>
+                        ${incluirMenus
+                            ? "<tr><th>#</th><th>Comensal</th><th>Estado</th><th>Menú</th><th>Alergias / Observaciones</th></tr>"
+                            : "<tr><th>#</th><th>Invitado</th><th>Estado</th></tr>"}
+                    </thead>
+                    <tbody>${filas}</tbody>
+                </table>
+            </div>
+        `;
+    }).join("");
+
+    ventana.document.write(`<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>${escaparHTML(tituloDocumento)}</title>
+<style>
+  body { font-family: Arial, sans-serif; color: #0f172a; margin: 24px; }
+  h1 { color: #833441; margin: 0 0 4px; font-size: 20px; }
+  p.sub { color: #475569; margin: 0 0 18px; font-size: 12px; }
+  .mesa-block { break-inside: avoid; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
+  .mesa-head { background: #833441; color: white; padding: 8px 12px; display: flex; justify-content: space-between; font-size: 13px; }
+  .mesa-note { background: #fdf2f4; color: #833441; padding: 5px 12px; font-size: 11px; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border-bottom: 1px solid #e2e8f0; padding: 6px 10px; text-align: left; }
+  th { background: #f8fafc; font-size: 11px; text-transform: uppercase; color: #475569; }
+</style></head><body>
+  <h1>${escaparHTML(tituloDocumento)}</h1>
+  <p class="sub">Lorena &amp; Estefanía · 15 de Mayo de 2027 · Jardines Pilar de la Dehesa</p>
+  ${bloquesMesas}
+  <script>window.onload = function(){ window.print(); };<\/script>
+</body></html>`);
+    ventana.document.close();
+}
+
+/**
+ * DOCUMENTO 1: Exporta el PDF visual de Distribución y Protocolo de Mesas (con croquis + asientos).
+ */
+async function exportarMesasPDF(botonEl = null) {
+    const datos = prepararDatosExportacionMesas();
+    if (!datos || (datos.mesas.length === 0 && datos.pendientesSinMesa.length === 0)) {
+        mostrarToast("Todavía no hay mesas ni invitados para exportar en PDF", "info");
+        return;
+    }
+
+    const htmlOriginal = botonEl ? botonEl.innerHTML : "";
+    if (botonEl) {
+        botonEl.disabled = true;
+        botonEl.innerHTML = '<i class="ph ph-spinner icon-pulse"></i> <span>Generando PDF...</span>';
+    }
+
+    try {
+        const JsPDFClass = await cargarLibreriasPDF();
+        const doc = new JsPDFClass({ orientation: "portrait", unit: "mm", format: "a4" });
+
+        let cursorY = dibujarCabeceraPDF(
+            doc,
+            "LORENA & ESTEFANÍA · DISTRIBUCIÓN DE MESAS",
+            "Plano de Protocolo y Asignación de Asientos"
+        );
+
+        cursorY = dibujarTarjetasKPIPDF(doc, [
+            { etiqueta: "MESAS CREADAS", valor: datos.resumen.totalMesas, destacar: true },
+            { etiqueta: "CONFIRMADOS EN MESA", valor: datos.resumen.confirmadosEnMesas },
+            { etiqueta: "FALTA POR CONFIRMAR", valor: datos.resumen.pendientesConfirmarEnMesas },
+            { etiqueta: "PENDIENTES DE MESA", valor: datos.resumen.sinMesaCount, alerta: datos.resumen.sinMesaCount > 0 }
+        ], cursorY);
+
+        // Leyenda cromática del croquis
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
+        doc.setFillColor(16, 185, 129);
+        doc.circle(16, cursorY - 1, 1.5, "F");
+        doc.setTextColor(51, 65, 85);
+        doc.text("Confirmado", 19, cursorY);
+
+        doc.setFillColor(245, 158, 11);
+        doc.circle(42, cursorY - 1, 1.5, "F");
+        doc.text("Falta por confirmar", 45, cursorY);
+
+        doc.setFillColor(226, 232, 240);
+        doc.circle(78, cursorY - 1, 1.5, "F");
+        doc.text("Asiento libre", 81, cursorY);
+
+        cursorY += 5;
+
+        datos.mesas.forEach(m => {
+            const filasEstimadas = Math.max(1, m.comensales.length);
+            const altoEstimado = Math.max(52, 14 + filasEstimadas * 6.5);
+
+            if (cursorY > 55 && cursorY + altoEstimado > 278) {
+                doc.addPage();
+                cursorY = 16;
+            }
+
+            // Barra de título de la mesa
+            doc.setFillColor(30, 41, 59);
+            doc.roundedRect(14, cursorY, 182, 8.5, 1.8, 1.8, "F");
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(9.5);
+            doc.setTextColor(255, 255, 255);
+            doc.text(limpiarTextoPDF(`#${m.ordenVisual} · ${m.nombre}`), 17.5, cursorY + 5.6);
+
+            const infoDerecha = `${m.formaEtiqueta} · ${m.ocupadosActivos}/${m.capacidad} plazas (${m.confirmadosMesa} conf.${m.pendientesMesa > 0 ? `, ${m.pendientesMesa} pend.` : ""})`;
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8);
+            doc.setTextColor(226, 232, 240);
+            doc.text(limpiarTextoPDF(infoDerecha), 192.5, cursorY + 5.6, { align: "right" });
+
+            cursorY += 10;
+
+            if (m.nota) {
+                doc.setFillColor(253, 242, 244);
+                doc.roundedRect(14, cursorY - 0.5, 182, 6, 1, 1, "F");
+                doc.setFont("helvetica", "italic");
+                doc.setFontSize(7.5);
+                doc.setTextColor(131, 52, 65);
+                doc.text(limpiarTextoPDF(`Ubicación / Nota: ${m.nota}`), 17, cursorY + 3.5);
+                cursorY += 7;
+            }
+
+            const bloqueTopY = cursorY;
+            dibujarCroquisVectorialMesaPDF(doc, m, 14, bloqueTopY, 50, 41);
+
+            const cuerpoTabla = m.comensales.length === 0
+                ? [["-", "Mesa vacía (sin invitados asignados todavía)", "Libre"]]
+                : m.comensales.map(c => [
+                    String(c.silla),
+                    limpiarTextoPDF(c.nombre),
+                    limpiarTextoPDF(c.estadoEtiqueta)
+                ]);
+
+            ejecutarAutoTablePDF(doc, {
+                startY: bloqueTopY,
+                margin: { left: 68, right: 14 },
+                tableWidth: 128,
+                head: [["Silla", "Invitado Asignado", "Estado"]],
+                body: cuerpoTabla,
+                theme: "grid",
+                styles: {
+                    font: "helvetica",
+                    fontSize: 8.2,
+                    cellPadding: 2.1,
+                    textColor: [15, 23, 42],
+                    lineColor: [226, 232, 240],
+                    lineWidth: 0.2
+                },
+                headStyles: {
+                    fillColor: [131, 52, 65],
+                    textColor: [255, 255, 255],
+                    fontStyle: "bold",
+                    fontSize: 7.8
+                },
+                columnStyles: {
+                    0: { cellWidth: 14, halign: "center", fontStyle: "bold" },
+                    1: { cellWidth: 82 },
+                    2: { cellWidth: 32, halign: "center", fontStyle: "bold" }
+                },
+                didParseCell(data) {
+                    if (data.section === "body" && data.column.index === 2) {
+                        const txt = String(data.cell.raw || "");
+                        if (txt === "Confirmado") {
+                            data.cell.styles.textColor = [5, 150, 105];
+                            data.cell.styles.fillColor = [240, 253, 244];
+                        } else if (txt === "Falta confirmar") {
+                            data.cell.styles.textColor = [180, 83, 9];
+                            data.cell.styles.fillColor = [255, 251, 235];
+                        } else {
+                            data.cell.styles.textColor = [100, 116, 139];
+                        }
+                    }
+                }
+            });
+
+            const finalTablaY = (doc.lastAutoTable && doc.lastAutoTable.finalY) || (bloqueTopY + 20);
+            cursorY = Math.max(bloqueTopY + 41, finalTablaY) + 7;
+        });
+
+        // Si existen invitados confirmados aún sin mesa, añadir anexo informativo
+        if (datos.pendientesSinMesa.length > 0) {
+            if (cursorY > 235) {
+                doc.addPage();
+                cursorY = 16;
+            }
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(10);
+            doc.setTextColor(180, 83, 9);
+            doc.text(
+                limpiarTextoPDF(`Invitados confirmados pendientes de asignar a mesa (${datos.pendientesSinMesa.length})`),
+                14,
+                cursorY + 4
+            );
+
+            ejecutarAutoTablePDF(doc, {
+                startY: cursorY + 6.5,
+                margin: { left: 14, right: 14 },
+                head: [["#", "Nombre del Invitado", "Grupo / Reserva"]],
+                body: datos.pendientesSinMesa.map((p, idx) => [
+                    String(idx + 1),
+                    limpiarTextoPDF(p.nombre),
+                    limpiarTextoPDF(p.grupoReserva)
+                ]),
+                theme: "grid",
+                styles: { font: "helvetica", fontSize: 8.2, cellPadding: 2.2 },
+                headStyles: { fillColor: [217, 119, 6], textColor: [255, 255, 255], fontStyle: "bold" },
+                columnStyles: {
+                    0: { cellWidth: 14, halign: "center", fontStyle: "bold" },
+                    1: { cellWidth: 94 },
+                    2: { cellWidth: 74 }
+                }
+            });
+        }
+
+        numerarPaginasPDF(doc, "Boda Lorena & Estefanía · Distribución y Protocolo de Mesas");
+
+        const hoy = new Date().toISOString().slice(0, 10);
+        doc.save(`Mesas_Boda_Lorena_y_Estefania_${hoy}.pdf`);
+        mostrarToast("PDF de Mesas descargado correctamente", "success");
+    } catch (err) {
+        console.warn("Usando ventana de impresión como respaldo para PDF de Mesas:", err);
+        imprimirFallbackPDF("Distribución de Mesas", datos, false);
+    } finally {
+        if (botonEl) {
+            botonEl.disabled = false;
+            botonEl.innerHTML = htmlOriginal;
+        }
+    }
+}
+
+/**
+ * DOCUMENTO 2: Exporta el PDF completo de Mesas + Menús + Niños + Alergias especial para el Catering.
+ */
+async function exportarMesasConMenusPDF(botonEl = null) {
+    const datos = prepararDatosExportacionMesas();
+    if (!datos || (datos.mesas.length === 0 && datos.pendientesSinMesa.length === 0)) {
+        mostrarToast("Todavía no hay mesas ni comensales para exportar al catering", "info");
+        return;
+    }
+
+    const htmlOriginal = botonEl ? botonEl.innerHTML : "";
+    if (botonEl) {
+        botonEl.disabled = true;
+        botonEl.innerHTML = '<i class="ph ph-spinner icon-pulse"></i> <span>Generando PDF...</span>';
+    }
+
+    try {
+        const JsPDFClass = await cargarLibreriasPDF();
+        const doc = new JsPDFClass({ orientation: "portrait", unit: "mm", format: "a4" });
+
+        let cursorY = dibujarCabeceraPDF(
+            doc,
+            "INFORME DE MESAS, MENÚS Y ALERGIAS · CATERING",
+            "Dossier Oficial para Cocina, Maître y Servicio de Salón"
+        );
+
+        const subComensales = datos.resumen.sinMesaCount > 0
+            ? `${datos.resumen.confirmadosEnMesas} en mesa + ${datos.resumen.sinMesaCount} sin ubicar`
+            : `${datos.resumen.confirmadosEnMesas} sentados en mesa`;
+
+        cursorY = dibujarTarjetasKPIPDF(doc, [
+            { etiqueta: "MESAS SALÓN", valor: datos.resumen.totalMesas, destacar: true },
+            { etiqueta: "COMENSALES CONF.", valor: datos.resumen.confirmadosGlobal, sub: subComensales },
+            { etiqueta: "MENÚ ADULTO", valor: datos.resumen.adultosGlobal },
+            { etiqueta: "MENÚ INFANTIL", valor: datos.resumen.ninosGlobal },
+            { etiqueta: "ALERGIAS / INTOL.", valor: datos.resumen.alergiasGlobal, alerta: datos.resumen.alergiasGlobal > 0 }
+        ], cursorY);
+
+        // 1. CUADRO RESUMEN POR MESA (VISTA MAÎTRE)
+        if (datos.mesas.length > 0) {
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(9.8);
+            doc.setTextColor(131, 52, 65);
+            doc.text("1. RESUMEN DE COMENSALES Y MENÚS POR MESA (VISTA MAÎTRE)", 14, cursorY + 2);
+
+            ejecutarAutoTablePDF(doc, {
+                startY: cursorY + 4.5,
+                margin: { left: 14, right: 14 },
+                head: [[
+                    "#",
+                    "Mesa",
+                    "Forma",
+                    "Confirmados",
+                    "Menú Adulto",
+                    "Menú Infantil",
+                    "Con Alergias",
+                    "Sin Conf.",
+                    "Notas / Ubicación"
+                ]],
+                body: datos.mesas.map(m => [
+                    String(m.ordenVisual),
+                    limpiarTextoPDF(m.nombre),
+                    limpiarTextoPDF(m.formaEtiqueta),
+                    String(m.confirmadosMesa),
+                    String(m.adultosMesa),
+                    String(m.ninosMesa),
+                    String(m.alergiasMesa),
+                    m.pendientesMesa > 0 ? String(m.pendientesMesa) : "-",
+                    limpiarTextoPDF(m.nota || "-")
+                ]),
+                foot: [[
+                    "",
+                    "TOTAL EN MESAS",
+                    "",
+                    String(datos.resumen.confirmadosEnMesas),
+                    String(datos.resumen.adultosEnMesas),
+                    String(datos.resumen.ninosEnMesas),
+                    String(datos.resumen.alergiasEnMesas),
+                    datos.resumen.pendientesConfirmarEnMesas > 0 ? String(datos.resumen.pendientesConfirmarEnMesas) : "-",
+                    ""
+                ]],
+                theme: "grid",
+                styles: {
+                    font: "helvetica",
+                    fontSize: 7.8,
+                    cellPadding: 2,
+                    textColor: [15, 23, 42],
+                    lineColor: [226, 232, 240],
+                    lineWidth: 0.2
+                },
+                headStyles: {
+                    fillColor: [30, 41, 59],
+                    textColor: [255, 255, 255],
+                    fontStyle: "bold",
+                    fontSize: 7.4
+                },
+                footStyles: {
+                    fillColor: [241, 245, 249],
+                    textColor: [15, 23, 42],
+                    fontStyle: "bold",
+                    fontSize: 8
+                },
+                columnStyles: {
+                    0: { cellWidth: 9, halign: "center", fontStyle: "bold" },
+                    1: { cellWidth: 38, fontStyle: "bold" },
+                    2: { cellWidth: 17, halign: "center" },
+                    3: { cellWidth: 19, halign: "center", fontStyle: "bold" },
+                    4: { cellWidth: 19, halign: "center" },
+                    5: { cellWidth: 19, halign: "center" },
+                    6: { cellWidth: 19, halign: "center", fontStyle: "bold" },
+                    7: { cellWidth: 15, halign: "center" },
+                    8: { cellWidth: 27 }
+                },
+                didParseCell(data) {
+                    if (data.section === "body") {
+                        if (data.column.index === 5 && parseInt(data.cell.raw, 10) > 0) {
+                            data.cell.styles.fillColor = [255, 251, 235];
+                            data.cell.styles.textColor = [180, 83, 9];
+                            data.cell.styles.fontStyle = "bold";
+                        }
+                        if (data.column.index === 6 && parseInt(data.cell.raw, 10) > 0) {
+                            data.cell.styles.fillColor = [254, 242, 242];
+                            data.cell.styles.textColor = [185, 28, 28];
+                        }
+                    }
+                }
+            });
+
+            cursorY = ((doc.lastAutoTable && doc.lastAutoTable.finalY) || cursorY) + 8;
+        }
+
+        // 2. CUADRO CRÍTICO DE ALERGIAS E INTOLERANCIAS (ESPECIAL COCINA)
+        if (datos.alergiasDetalle.length > 0) {
+            if (cursorY > 235) {
+                doc.addPage();
+                cursorY = 16;
+            }
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(9.8);
+            doc.setTextColor(185, 28, 28);
+            doc.text(
+                limpiarTextoPDF(`2. ATENCIÓN COCINA: RELACIÓN DE ALERGIAS E INTOLERANCIAS (${datos.alergiasDetalle.length})`),
+                14,
+                cursorY + 2
+            );
+
+            ejecutarAutoTablePDF(doc, {
+                startY: cursorY + 4.5,
+                margin: { left: 14, right: 14 },
+                head: [["Mesa", "Silla", "Nombre del Comensal", "Menú", "Alergia / Intolerancia Declarada", "Observaciones"]],
+                body: datos.alergiasDetalle.map(al => [
+                    limpiarTextoPDF(al.mesaNombre),
+                    limpiarTextoPDF(al.silla),
+                    limpiarTextoPDF(al.nombre),
+                    limpiarTextoPDF(al.menuEtiqueta),
+                    limpiarTextoPDF(al.alergia),
+                    limpiarTextoPDF(al.observaciones || "-")
+                ]),
+                theme: "grid",
+                styles: {
+                    font: "helvetica",
+                    fontSize: 8,
+                    cellPadding: 2.2,
+                    textColor: [15, 23, 42],
+                    lineColor: [254, 202, 202],
+                    lineWidth: 0.2
+                },
+                headStyles: {
+                    fillColor: [185, 28, 28],
+                    textColor: [255, 255, 255],
+                    fontStyle: "bold",
+                    fontSize: 7.6
+                },
+                columnStyles: {
+                    0: { cellWidth: 34, fontStyle: "bold" },
+                    1: { cellWidth: 11, halign: "center", fontStyle: "bold" },
+                    2: { cellWidth: 46, fontStyle: "bold" },
+                    3: { cellWidth: 24, halign: "center" },
+                    4: { cellWidth: 41, fontStyle: "bold", textColor: [153, 27, 27], fillColor: [254, 242, 242] },
+                    5: { cellWidth: 26 }
+                }
+            });
+
+            cursorY = ((doc.lastAutoTable && doc.lastAutoTable.finalY) || cursorY) + 9;
+        }
+
+        // 3. DESGLOSE DETALLADO MESA POR MESA CON MENÚS
+        if (datos.mesas.length > 0) {
+            if (cursorY > 240) {
+                doc.addPage();
+                cursorY = 16;
+            }
+
+            const numSeccionDetalle = datos.alergiasDetalle.length > 0 ? "3" : "2";
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(10.2);
+            doc.setTextColor(131, 52, 65);
+            doc.text(`${numSeccionDetalle}. DETALLE INDIVIDUAL POR MESA (COMENSALES, MENÚS Y ALERGIAS)`, 14, cursorY + 2);
+            cursorY += 6;
+
+            datos.mesas.forEach(m => {
+                const filasEstimadas = Math.max(1, m.comensales.length);
+                const altoEstimado = 16 + filasEstimadas * 6.8 + (m.nota ? 6 : 0);
+
+                if (cursorY > 45 && cursorY + Math.min(altoEstimado, 85) > 278) {
+                    doc.addPage();
+                    cursorY = 16;
+                }
+
+                // Cabecera de la mesa con conteo directo de menús para los camareros
+                doc.setFillColor(131, 52, 65);
+                doc.roundedRect(14, cursorY, 182, 8.5, 1.6, 1.6, "F");
+
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(9.4);
+                doc.setTextColor(255, 255, 255);
+                doc.text(
+                    limpiarTextoPDF(`#${m.ordenVisual} · ${m.nombre} (${m.formaEtiqueta})`),
+                    17.5,
+                    cursorY + 5.6
+                );
+
+                const resumenPlatosMesa = `Adultos: ${m.adultosMesa}  |  Infantil: ${m.ninosMesa}  |  Alergias: ${m.alergiasMesa}${m.pendientesMesa > 0 ? `  |  Sin conf.: ${m.pendientesMesa}` : ""}`;
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(7.8);
+                doc.setTextColor(254, 249, 195);
+                doc.text(limpiarTextoPDF(resumenPlatosMesa), 192.5, cursorY + 5.6, { align: "right" });
+
+                cursorY += 9.5;
+
+                if (m.nota) {
+                    doc.setFillColor(253, 242, 244);
+                    doc.rect(14, cursorY - 0.5, 182, 5.8, "F");
+                    doc.setFont("helvetica", "italic");
+                    doc.setFontSize(7.5);
+                    doc.setTextColor(131, 52, 65);
+                    doc.text(limpiarTextoPDF(`Nota de salón: ${m.nota}`), 17, cursorY + 3.4);
+                    cursorY += 6;
+                }
+
+                const filasComensales = m.comensales.length === 0
+                    ? [["-", "Mesa vacía (sin comensales asignados)", "-", "-", "-", "-"]]
+                    : m.comensales.map(c => [
+                        String(c.silla),
+                        limpiarTextoPDF(c.nombre),
+                        limpiarTextoPDF(c.estadoEtiqueta),
+                        limpiarTextoPDF(c.menuEtiqueta),
+                        limpiarTextoPDF(c.alergiaEtiqueta),
+                        limpiarTextoPDF(c.observaciones || "-")
+                    ]);
+
+                ejecutarAutoTablePDF(doc, {
+                    startY: cursorY,
+                    margin: { left: 14, right: 14 },
+                    tableWidth: 182,
+                    head: [["Silla", "Nombre del Comensal", "Estado", "Menú", "Alergias / Intolerancias", "Observaciones"]],
+                    body: filasComensales,
+                    theme: "grid",
+                    styles: {
+                        font: "helvetica",
+                        fontSize: 8,
+                        cellPadding: 2,
+                        textColor: [15, 23, 42],
+                        lineColor: [226, 232, 240],
+                        lineWidth: 0.2
+                    },
+                    headStyles: {
+                        fillColor: [51, 65, 85],
+                        textColor: [255, 255, 255],
+                        fontStyle: "bold",
+                        fontSize: 7.5
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 10, halign: "center", fontStyle: "bold" },
+                        1: { cellWidth: 56, fontStyle: "bold" },
+                        2: { cellWidth: 25, halign: "center" },
+                        3: { cellWidth: 27, halign: "center", fontStyle: "bold" },
+                        4: { cellWidth: 38 },
+                        5: { cellWidth: 26 }
+                    },
+                    didParseCell(data) {
+                        if (data.section !== "body") return;
+                        const rowIdx = data.row.index;
+                        const c = m.comensales[rowIdx];
+                        if (!c) return;
+
+                        if (data.column.index === 2) {
+                            if (c.tipoAsiento === "confirmado") {
+                                data.cell.styles.textColor = [5, 150, 105];
+                            } else {
+                                data.cell.styles.textColor = [180, 83, 9];
+                                data.cell.styles.fillColor = [255, 251, 235];
+                            }
+                        }
+
+                        if (data.column.index === 3) {
+                            if (c.menuCategoria === "nino") {
+                                data.cell.styles.fillColor = [255, 251, 235];
+                                data.cell.styles.textColor = [180, 83, 9];
+                            } else if (c.menuCategoria === "pendiente") {
+                                data.cell.styles.textColor = [148, 163, 184];
+                                data.cell.styles.fontStyle = "normal";
+                            }
+                        }
+
+                        if (data.column.index === 4 && c.tieneAlergia) {
+                            data.cell.styles.fillColor = [254, 242, 242];
+                            data.cell.styles.textColor = [185, 28, 28];
+                            data.cell.styles.fontStyle = "bold";
+                        }
+                    }
+                });
+
+                cursorY = ((doc.lastAutoTable && doc.lastAutoTable.finalY) || cursorY) + 7;
+            });
+        }
+
+        // 4. ANEXO SI QUEDAN COMENSALES CONFIRMADOS SIN MESA ASIGNADA
+        if (datos.pendientesSinMesa.length > 0) {
+            if (cursorY > 230) {
+                doc.addPage();
+                cursorY = 16;
+            }
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(9.6);
+            doc.setTextColor(180, 83, 9);
+            doc.text(
+                limpiarTextoPDF(`Comensales confirmados pendientes de ubicar en mesa (${datos.pendientesSinMesa.length} incluidos en totales)`),
+                14,
+                cursorY + 3
+            );
+
+            ejecutarAutoTablePDF(doc, {
+                startY: cursorY + 5.5,
+                margin: { left: 14, right: 14 },
+                head: [["#", "Nombre del Comensal", "Menú", "Alergias / Intolerancias", "Observaciones", "Reserva"]],
+                body: datos.pendientesSinMesa.map((p, idx) => [
+                    String(idx + 1),
+                    limpiarTextoPDF(p.nombre),
+                    limpiarTextoPDF(p.menuEtiqueta),
+                    limpiarTextoPDF(p.alergiaEtiqueta),
+                    limpiarTextoPDF(p.observaciones || "-"),
+                    limpiarTextoPDF(p.grupoReserva)
+                ]),
+                theme: "grid",
+                styles: { font: "helvetica", fontSize: 7.9, cellPadding: 2 },
+                headStyles: { fillColor: [217, 119, 6], textColor: [255, 255, 255], fontStyle: "bold" },
+                didParseCell(data) {
+                    if (data.section !== "body") return;
+                    const p = datos.pendientesSinMesa[data.row.index];
+                    if (p && data.column.index === 3 && p.tieneAlergia) {
+                        data.cell.styles.fillColor = [254, 242, 242];
+                        data.cell.styles.textColor = [185, 28, 28];
+                        data.cell.styles.fontStyle = "bold";
+                    }
+                }
+            });
+        }
+
+        numerarPaginasPDF(doc, "Boda Lorena & Estefanía · Informe Oficial de Mesas, Menús y Alergias (Catering)");
+
+        const hoy = new Date().toISOString().slice(0, 10);
+        doc.save(`Catering_Mesas_y_Menus_Lorena_y_Estefania_${hoy}.pdf`);
+        mostrarToast("PDF de Mesas + Menús para Catering descargado", "success");
+    } catch (err) {
+        console.warn("Usando ventana de impresión como respaldo para PDF de Catering:", err);
+        imprimirFallbackPDF("Informe de Mesas y Menús (Catering)", datos, true);
+    } finally {
+        if (botonEl) {
+            botonEl.disabled = false;
+            botonEl.innerHTML = htmlOriginal;
+        }
+    }
+}
+
+// ==========================================================================
 // 9. UTILIDADES Y EVENT LISTENERS DEL PANEL PRIVADO
 // ==========================================================================
 
@@ -4544,7 +5660,12 @@ if (filtroMesaSelect) {
     });
 }
 
-// Botón de exportar informe Excel/CSV para Catering y Autobuses
+// Botones superiores de exportación para Catering (PDF y Excel/CSV)
+if (btnTopbarPdfCatering) {
+    btnTopbarPdfCatering.addEventListener("click", function () {
+        exportarMesasConMenusPDF(this);
+    });
+}
 if (btnExportarCatering) {
     btnExportarCatering.addEventListener("click", exportarInformeCatering);
 }
@@ -4618,6 +5739,16 @@ if (filtrosMesasContainer) {
 }
 
 if (btnNuevaMesa) btnNuevaMesa.addEventListener("click", abrirModalNuevaMesa);
+if (btnExportarMesasPdf) {
+    btnExportarMesasPdf.addEventListener("click", function () {
+        exportarMesasPDF(this);
+    });
+}
+if (btnExportarMesasMenusPdf) {
+    btnExportarMesasMenusPdf.addEventListener("click", function () {
+        exportarMesasConMenusPDF(this);
+    });
+}
 if (btnExportarMesasCsv) btnExportarMesasCsv.addEventListener("click", exportarCroquisMesasCSV);
 if (modalMesaOverlay) modalMesaOverlay.addEventListener("click", cerrarModalMesa);
 if (btnCerrarModalMesa) btnCerrarModalMesa.addEventListener("click", cerrarModalMesa);

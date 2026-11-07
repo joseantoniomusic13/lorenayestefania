@@ -2394,6 +2394,38 @@ footer p {
   box-shadow: 0 6px 16px rgba(5, 150, 105, 0.38);
 }
 
+.app-btn-pdf {
+  background: #fff1f2;
+  color: #9f1239;
+  border: 1px solid #fecdd3;
+  box-shadow: 0 2px 8px rgba(159, 18, 57, 0.08);
+}
+
+.app-btn-pdf:hover {
+  background: #ffe4e6;
+  color: #881337;
+  border-color: #fda4af;
+  transform: translateY(-1px);
+}
+
+.app-btn-pdf-catering {
+  background: #1e293b;
+  color: white;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.22);
+}
+
+.app-btn-pdf-catering:hover {
+  background: #0f172a;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.32);
+}
+
+.app-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+  transform: none !important;
+}
+
 .app-kpi-card.kpi-active {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(131, 52, 65, 0.16), 0 8px 20px rgba(15, 23, 42, 0.08);

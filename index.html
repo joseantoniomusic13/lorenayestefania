@@ -10,14 +10,15 @@
     <!-- Metadatos Open Graph para WhatsApp y Redes Sociales -->
     <meta property="og:type" content="website">
     <meta property="og:locale" content="es_ES">
+    <meta property="og:url" content="https://lorenayestefania.vercel.app/">
     <meta property="og:title" content="Lorena & Estefanía | ¡Nos Casamos! 💍 15·05·2027">
     <meta property="og:description" content="Nos encantaría compartir nuestro gran día contigo en Lucena, Córdoba. Entra para ver todos los detalles y confirmar tu asistencia.">
-    <meta property="og:image" content="https://bodalorenaestefania.firebaseapp.com/hero.jpg">
+    <meta property="og:image" content="https://lorenayestefania.vercel.app/hero.jpg">
     <meta property="og:image:alt" content="Boda de Lorena y Estefanía - 15 de mayo de 2027">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Lorena & Estefanía | Nuestra Boda · 15·05·2027">
     <meta name="twitter:description" content="Confirma tu asistencia y descubre todos los detalles de nuestra boda en Lucena, Córdoba.">
-    <meta name="twitter:image" content="https://bodalorenaestefania.firebaseapp.com/hero.jpg">
+    <meta name="twitter:image" content="https://lorenayestefania.vercel.app/hero.jpg">
     <meta name="theme-color" content="#833441">
 
     <!-- Fuentes elegantes y románticas -->
@@ -30,7 +31,7 @@
     <!-- Phosphor Icons (Librería moderna de iconos) -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 
 <body>
@@ -71,9 +72,27 @@
                 </div>
             </div>
 
-            <a href="#rsvp" class="btn">
-                Confirmar asistencia <i class="ph ph-envelope-simple"></i>
-            </a>
+            <div class="hero-actions">
+                <a href="#rsvp" class="btn">
+                    Confirmar asistencia <i class="ph ph-envelope-simple"></i>
+                </a>
+
+                <div class="calendar-dropdown-wrapper">
+                    <button type="button" id="btn-add-calendar" class="btn-hero-secondary" aria-expanded="false">
+                        <i class="ph ph-calendar-plus"></i> Guardar fecha <i class="ph ph-caret-down"></i>
+                    </button>
+                    <div id="calendar-menu" class="calendar-menu" style="display: none;">
+                        <a id="link-google-calendar"
+                            href="https://calendar.google.com/calendar/render?action=TEMPLATE&text=Boda+de+Lorena+%26+Estefan%C3%ADa+%F0%9F%92%8D&dates=20270515/20270516&details=%C2%A1Nos+casamos!+Te+esperamos+para+celebrar+nuestra+boda+en+Jardines+Pilar+de+la+Dehesa+(Lucena,+C%C3%B3rdoba).+Web:+https://lorenayestefania.vercel.app/&location=Jardines+Palacio+de+la+Dehesa,+Lucena,+C%C3%B3rdoba"
+                            target="_blank" rel="noopener noreferrer">
+                            <i class="ph ph-google-logo"></i> Google Calendar
+                        </a>
+                        <button type="button" id="btn-ics-calendar">
+                            <i class="ph ph-apple-logo"></i> iPhone / Otro Calendario
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -140,7 +159,15 @@
     <section id="ubicacion" class="section">
         <h2 class="section-title"><i class="ph ph-map-trifold icon-beat"></i> Jardines Pilar de la Dehesa</h2>
         <p class="section-subtitle">Lucena, Córdoba <br> 15 de mayo de 2027</p>
-        <a class="btn-outline" href="javascript:void(0);" id="btn-map">Cómo llegar <i class="ph ph-arrow-right"></i></a>
+        <div class="location-actions">
+            <a class="btn" href="https://www.google.com/maps/dir/?api=1&destination=Jardines+Palacio+de+la+Dehesa,+Lucena,+Cordoba"
+                target="_blank" rel="noopener noreferrer">
+                <i class="ph ph-navigation-arrow"></i> Abrir GPS en Google Maps
+            </a>
+            <a class="btn-outline" href="javascript:void(0);" id="btn-map">
+                Ver mapa aquí <i class="ph ph-map-pin"></i>
+            </a>
+        </div>
 
         <div id="map-container" class="map-container fade-in"
             style="display: none; margin-top: 30px; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-md);">
@@ -259,17 +286,15 @@
         <p class="section-subtitle">Queremos que estéis guapísimos, pero os pedimos un pequeño detalle para nuestro gran
             día.</p>
 
-        <div class="cards" style="justify-content: center; max-width: 700px; margin: 0 auto; display: flex; gap: 30px;">
-            <div class="card hover-animate"
-                style="flex: 1; border-top: 4px solid var(--primary); background: var(--bg-color);">
+        <div class="cards dress-code-cards">
+            <div class="card hover-animate dress-card-all">
                 <div class="icon-wrapper"><i class="ph ph-drop"></i></div>
                 <h3>Para todos</h3>
                 <p style="font-size: 1.05rem; margin-top: 15px;">Nos encantaría que nuestra boda esté llena de color.
                     Por eso os pedimos <strong>evitar el blanco o colores similares</strong>.</p>
             </div>
 
-            <div class="card hover-animate"
-                style="flex: 1; border-top: 4px solid var(--text-dark); background: var(--bg-color);">
+            <div class="card hover-animate dress-card-her">
                 <div class="icon-wrapper" style="background: var(--text-dark);"><i class="ph ph-warning"
                         style="color: white;"></i></div>
                 <h3>Para ellas</h3>
@@ -305,6 +330,23 @@
 
             <div id="guests-container">
                 <!-- Filas generadas por JS -->
+            </div>
+
+            <div id="contact-notes-container" class="fade-in"
+                style="display: none; margin-top: 15px; margin-bottom: 18px;">
+                <p style="margin-bottom: 6px; font-weight: 500; font-size: 0.95rem; text-align: left;">Teléfono de contacto (Opcional)</p>
+                <div class="input-group" style="margin-bottom: 16px;">
+                    <i class="ph ph-phone"></i>
+                    <input type="tel" id="contact-phone" name="contact-phone"
+                        placeholder="Ej: 600 123 456 (por si necesitamos avisaros)">
+                </div>
+
+                <p style="margin-bottom: 6px; font-weight: 500; font-size: 0.95rem; text-align: left;">Observaciones o mensaje para nosotras (Opcional)</p>
+                <div class="input-group textarea-group" style="margin-bottom: 0;">
+                    <i class="ph ph-chat-circle-text"></i>
+                    <textarea id="rsvp-notes" name="rsvp-notes" rows="2"
+                        placeholder="Ej: Necesitamos trona para bebé, espacio para carrito, alguna dedicatoria..."></textarea>
+                </div>
             </div>
 
             <div id="extra-fields-container" class="fade-in"
@@ -432,6 +474,10 @@
                 </div>
             </div>
             <div class="app-topbar-actions">
+                <button type="button" id="btn-exportar-catering" class="app-btn app-btn-export" title="Descargar informe Excel/CSV para Catering y Autobuses">
+                    <i class="ph ph-file-xls"></i>
+                    <span>Exportar Catering</span>
+                </button>
                 <button type="button" id="btn-nueva-reserva-manual" class="app-btn app-btn-primary">
                     <i class="ph ph-user-plus"></i>
                     <span>Añadir Invitación Manual</span>
@@ -454,7 +500,7 @@
                     </div>
                 </div>
 
-                <div class="app-kpi-card kpi-adultos">
+                <div class="app-kpi-card kpi-adultos" data-quick-filter="adultos" title="Filtrar reservas con menú adulto">
                     <div class="app-kpi-icon"><i class="ph ph-fork-knife"></i></div>
                     <div class="app-kpi-content">
                         <span id="stat-adultos" class="privado-stat-num">0</span>
@@ -462,7 +508,7 @@
                     </div>
                 </div>
 
-                <div class="app-kpi-card kpi-ninos">
+                <div class="app-kpi-card kpi-ninos" data-quick-filter="ninos" title="Filtrar reservas con menú niño">
                     <div class="app-kpi-icon"><i class="ph ph-baby"></i></div>
                     <div class="app-kpi-content">
                         <span id="stat-ninos" class="privado-stat-num">0</span>
@@ -506,12 +552,22 @@
 
             <!-- Barra de Herramientas: Buscador en tiempo real + Filtros rápidos -->
             <div class="app-toolbar">
-                <div class="app-search-box">
-                    <i class="ph ph-magnifying-glass"></i>
-                    <input type="text" id="buscador-reservas" placeholder="Buscar por nombre de invitado, alergia, canción..." autocomplete="off">
-                    <button type="button" id="btn-clear-search" class="app-search-clear" style="display:none;" aria-label="Limpiar búsqueda">
-                        <i class="ph ph-x-circle"></i>
-                    </button>
+                <div class="app-toolbar-top">
+                    <div class="app-search-box">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="buscador-reservas" placeholder="Buscar por invitado, mesa, alergia, teléfono, nota, canción..." autocomplete="off">
+                        <button type="button" id="btn-clear-search" class="app-search-clear" style="display:none;" aria-label="Limpiar búsqueda">
+                            <i class="ph ph-x-circle"></i>
+                        </button>
+                    </div>
+
+                    <div class="app-mesa-filter-box">
+                        <i class="ph ph-armchair"></i>
+                        <select id="filtro-mesa-select" class="app-mesa-select" aria-label="Filtrar por mesa o grupo">
+                            <option value="">Todas las mesas / grupos</option>
+                            <option value="__SIN_MESA__">🪑 Sin mesa asignada</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="app-filter-pills" id="filtros-reservas">
@@ -523,6 +579,12 @@
                     </button>
                     <button type="button" class="app-filter-pill" data-filter="no-asisten">
                         <i class="ph ph-x-circle"></i> No asisten <span class="pill-count" id="pill-count-no-asisten">0</span>
+                    </button>
+                    <button type="button" class="app-filter-pill" data-filter="adultos">
+                        <i class="ph ph-fork-knife"></i> Menú adulto <span class="pill-count" id="pill-count-adultos">0</span>
+                    </button>
+                    <button type="button" class="app-filter-pill" data-filter="ninos">
+                        <i class="ph ph-baby"></i> Con niños <span class="pill-count" id="pill-count-ninos">0</span>
                     </button>
                     <button type="button" class="app-filter-pill" data-filter="alergia">
                         <i class="ph ph-warning-circle"></i> Con alergia <span class="pill-count" id="pill-count-alergia">0</span>
@@ -621,6 +683,22 @@
                     <!-- Filas dinámicas idénticas al formulario público -->
                 </div>
 
+                <div id="manual-contact-notes" class="app-form-section">
+                    <label class="app-form-label" for="manual-contact-phone">
+                        <i class="ph ph-phone"></i> Teléfono de contacto y observaciones del invitado (Opcional)
+                    </label>
+                    <div class="input-group" style="margin-bottom: 12px;">
+                        <i class="ph ph-phone"></i>
+                        <input type="tel" id="manual-contact-phone" name="manual-contact-phone"
+                            placeholder="Teléfono (ej: 600 123 456)">
+                    </div>
+                    <div class="input-group textarea-group" style="margin-bottom: 0;">
+                        <i class="ph ph-chat-circle-text"></i>
+                        <textarea id="manual-rsvp-notes" name="manual-rsvp-notes" rows="2"
+                            placeholder="Observaciones del invitado (trona, carrito, horario...)"></textarea>
+                    </div>
+                </div>
+
                 <div id="manual-extra-fields" style="display: none;">
                     <div class="app-form-section">
                         <label class="app-form-label" for="manual-song-suggestion">
@@ -631,6 +709,40 @@
                             <input type="text" id="manual-song-suggestion" name="manual-song-suggestion"
                                 placeholder="Ej: Mi Gran Noche - Raphael">
                         </div>
+                    </div>
+                </div>
+
+                <!-- Sección exclusiva de Organización Interna (Mesas / Notas Privadas) -->
+                <div class="app-form-section app-org-internal-section">
+                    <label class="app-form-label" for="manual-mesa">
+                        <i class="ph ph-armchair"></i> Organización Interna: Mesa / Grupo y Notas Privadas
+                    </label>
+                    <div class="input-group" style="margin-bottom: 12px;">
+                        <i class="ph ph-armchair"></i>
+                        <input type="text" id="manual-mesa" name="manual-mesa" list="lista-mesas-sugeridas"
+                            placeholder="Asignar mesa o grupo (ej: Mesa 1, Familia Lorena, Amigos...)">
+                        <datalist id="lista-mesas-sugeridas">
+                            <option value="Mesa Presidencial"></option>
+                            <option value="Familia Lorena"></option>
+                            <option value="Familia Estefanía"></option>
+                            <option value="Amigos"></option>
+                            <option value="Compañeros"></option>
+                            <option value="Mesa 1"></option>
+                            <option value="Mesa 2"></option>
+                            <option value="Mesa 3"></option>
+                            <option value="Mesa 4"></option>
+                            <option value="Mesa 5"></option>
+                            <option value="Mesa 6"></option>
+                            <option value="Mesa 7"></option>
+                            <option value="Mesa 8"></option>
+                            <option value="Mesa 9"></option>
+                            <option value="Mesa 10"></option>
+                        </datalist>
+                    </div>
+                    <div class="input-group textarea-group" style="margin-bottom: 0;">
+                        <i class="ph ph-note-pencil"></i>
+                        <textarea id="manual-notas-internas" name="manual-notas-internas" rows="2"
+                            placeholder="Nota interna privada (solo visible para organizadoras)..."></textarea>
                     </div>
                 </div>
 
@@ -647,6 +759,28 @@
         </div>
     </div>
 
+    <!-- ============================================================
+         MODAL DE CONFIRMACIÓN DE ELIMINACIÓN
+         ============================================================ -->
+    <div id="modal-confirmar-eliminar" class="modal-privado" role="dialog" aria-modal="true">
+        <div class="modal-privado-overlay" id="modal-eliminar-overlay"></div>
+        <div class="modal-privado-box glass-effect app-confirm-delete-box">
+            <div class="modal-privado-icon delete-icon-wrap">
+                <i class="ph ph-trash"></i>
+            </div>
+            <h3>¿Eliminar esta reserva?</h3>
+            <p id="confirmar-eliminar-texto">Se borrará permanentemente de Firestore y del Excel de Google Sheets.</p>
+            <div class="app-confirm-delete-actions">
+                <button type="button" id="btn-cancelar-eliminar" class="app-btn app-btn-secondary">
+                    Cancelar
+                </button>
+                <button type="button" id="btn-aceptar-eliminar" class="app-btn app-btn-danger">
+                    <i class="ph ph-trash"></i> Sí, eliminar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast de notificaciones de la App -->
     <div id="app-toast" class="app-toast" aria-live="polite"></div>
 
@@ -660,7 +794,7 @@
     </audio>
 
     <!-- Inicialización de Firebase v13.2.0 + Lógica de la aplicación -->
-    <script type="module" src="script.js?v=6"></script>
+    <script type="module" src="script.js?v=7"></script>
 
 </body>
 

@@ -153,11 +153,72 @@ const mapContainer = document.getElementById("map-container");
 if (btnMap && mapContainer) {
     btnMap.addEventListener("click", function (e) {
         e.preventDefault();
-        if (mapContainer.style.display === "none" || mapContainer.style.display === "") {
-            mapContainer.style.display = "block";
-        } else {
-            mapContainer.style.display = "none";
+        const visible = mapContainer.style.display === "block";
+        mapContainer.style.display = visible ? "none" : "block";
+        btnMap.innerHTML = visible
+            ? 'Ver mapa aquí <i class="ph ph-map-pin"></i>'
+            : 'Ocultar mapa <i class="ph ph-caret-up"></i>';
+    });
+}
+
+// Botón "Guardar fecha en calendario" (Google Calendar + archivo .ics para iPhone/Outlook)
+const btnAddCalendar = document.getElementById("btn-add-calendar");
+const calendarMenu = document.getElementById("calendar-menu");
+const btnIcsCalendar = document.getElementById("btn-ics-calendar");
+
+if (btnAddCalendar && calendarMenu) {
+    btnAddCalendar.addEventListener("click", function (e) {
+        e.stopPropagation();
+        const abierto = calendarMenu.style.display === "flex";
+        calendarMenu.style.display = abierto ? "none" : "flex";
+        btnAddCalendar.setAttribute("aria-expanded", abierto ? "false" : "true");
+    });
+
+    document.addEventListener("click", function (e) {
+        if (!calendarMenu.contains(e.target) && e.target !== btnAddCalendar) {
+            calendarMenu.style.display = "none";
+            btnAddCalendar.setAttribute("aria-expanded", "false");
         }
+    });
+}
+
+if (btnIcsCalendar) {
+    btnIcsCalendar.addEventListener("click", function () {
+        const icsLines = [
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            "PRODID:-//Lorena y Estefania//Nuestra Boda 2027//ES",
+            "CALSCALE:GREGORIAN",
+            "METHOD:PUBLISH",
+            "BEGIN:VEVENT",
+            "UID:boda-lorena-estefania-20270515@lorenayestefania.vercel.app",
+            "DTSTAMP:20261107T000000Z",
+            "DTSTART;VALUE=DATE:20270515",
+            "DTEND;VALUE=DATE:20270516",
+            "SUMMARY:Boda de Lorena & Estefanía 💍",
+            "DESCRIPTION:¡Nos casamos! Celebración de nuestra boda en Jardines Pilar de la Dehesa (Lucena\\, Córdoba). Toda la info en https://lorenayestefania.vercel.app/",
+            "LOCATION:Jardines Palacio de la Dehesa\\, Lucena\\, Córdoba",
+            "BEGIN:VALARM",
+            "TRIGGER:-P1D",
+            "ACTION:DISPLAY",
+            "DESCRIPTION:¡Mañana es la boda de Lorena y Estefanía!",
+            "END:VALARM",
+            "END:VEVENT",
+            "END:VCALENDAR"
+        ].join("\r\n");
+
+        const blob = new Blob([icsLines], { type: "text/calendar;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "boda-lorena-y-estefania.ics";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+        if (calendarMenu) calendarMenu.style.display = "none";
+        mostrarToast("Evento descargado para tu calendario", "success");
     });
 }
 
@@ -369,20 +430,24 @@ if (guestCountSelect) {
     guestCountSelect.addEventListener("change", function () {
         const count = parseInt(this.value, 10);
         const extraFields = document.getElementById("extra-fields-container");
+        const contactNotesFields = document.getElementById("contact-notes-container");
 
         if (count > 0) {
             btnSubmit.style.display = "flex";
+            if (contactNotesFields) contactNotesFields.style.display = "block";
             if (extraFields) extraFields.style.display = "block";
             btnSubmit.innerHTML = `Confirmar ${count} Asistente${count > 1 ? "s" : ""} <i class="ph ph-paper-plane-right"></i>`;
             renderizarFilasInvitados(guestsContainer, count, "public");
         } else if (count === 0) {
             btnSubmit.style.display = "flex";
+            if (contactNotesFields) contactNotesFields.style.display = "block";
             if (extraFields) extraFields.style.display = "none";
             btnSubmit.innerHTML = `Confirmar No Asistencia <i class="ph ph-paper-plane-right"></i>`;
             renderizarFilasInvitados(guestsContainer, 0, "public");
         } else {
             guestsContainer.innerHTML = "";
             btnSubmit.style.display = "none";
+            if (contactNotesFields) contactNotesFields.style.display = "none";
             if (extraFields) extraFields.style.display = "none";
         }
     });
@@ -437,26 +502,58 @@ function construirDatosReserva(formElement, countVal, prefix = "public", origen 
         nombres = nombresArr.join(", ");
     }
 
+    const phoneField = isManual ? "manual-contact-phone" : "contact-phone";
+    const notesField = isManual ? "manual-rsvp-notes" : "rsvp-notes";
     const songField = isManual ? "manual-song-suggestion" : "song-suggestion";
+
+    const telefono = (formData.get(phoneField) || "").trim();
+    const observaciones = (formData.get(notesField) || "").replace(/\r?\n/g, " ").trim();
     const cancion = (formData.get(songField) || "").trim();
+
+    if (telefono) {
+        detallesLineas.push(`Teléfono: ${telefono}`);
+    }
+    if (observaciones) {
+        detallesLineas.push(`Observaciones: ${observaciones}`);
+    }
+
+    const mesa = isManual ? (formData.get("manual-mesa") || "").trim() : undefined;
+    const notasInternas = isManual
+        ? (formData.get("manual-notas-internas") || "").replace(/\r?\n/g, " ").trim()
+        : undefined;
+
+    if (isManual && mesa) {
+        detallesLineas.push(`Mesa/Grupo: ${mesa}`);
+    }
 
     let detalles = detallesLineas.join("\n");
     if (cancion && count > 0) {
         detalles += "\nCanción sugerida: " + cancion;
     }
 
-    return {
+    const resultado = {
         asistencia: count === 0 ? "No asisten" : "Sí asisten",
         asiste: count > 0,
         numero_invitados: count,
         nombres,
         invitados,
+        telefono,
+        observaciones,
         detalles,
         cancion: count > 0 ? cancion : "",
         origen,
         fecha: fechaActual,
         updatedAt: Date.now()
     };
+
+    // Solo incluir campos privados cuando se guarda desde el panel de organizadoras,
+    // para que si el invitado actualiza su respuesta web no borre su mesa asignada.
+    if (isManual) {
+        resultado.mesa = mesa;
+        resultado.notasInternas = notasInternas;
+    }
+
+    return resultado;
 }
 
 /**
@@ -717,6 +814,8 @@ const detalleBody = document.getElementById("detalle-body");
 
 // Modal de Gestión Manual / Edición
 const btnNuevaReservaManual = document.getElementById("btn-nueva-reserva-manual");
+const btnExportarCatering = document.getElementById("btn-exportar-catering");
+const filtroMesaSelect = document.getElementById("filtro-mesa-select");
 const modalReservaManual = document.getElementById("modal-reserva-manual");
 const modalManualOverlay = document.getElementById("modal-manual-overlay");
 const btnCerrarManual = document.getElementById("btn-cerrar-manual");
@@ -727,19 +826,38 @@ const manualGuestCountSelect = document.getElementById("manual-guest-count");
 const manualGuestsContainer = document.getElementById("manual-guests-container");
 const manualExtraFields = document.getElementById("manual-extra-fields");
 const manualSongInput = document.getElementById("manual-song-suggestion");
+const manualPhoneInput = document.getElementById("manual-contact-phone");
+const manualNotesInput = document.getElementById("manual-rsvp-notes");
+const manualMesaInput = document.getElementById("manual-mesa");
+const manualNotasInternasInput = document.getElementById("manual-notas-internas");
 const modalManualTitle = document.getElementById("modal-manual-title");
 const modalManualSubtitle = document.getElementById("modal-manual-subtitle");
 const modalManualIcon = document.getElementById("modal-manual-icon");
 const btnGuardarManualText = document.getElementById("btn-guardar-manual-text");
 
+// Modal de Confirmación de Eliminación
+const modalConfirmarEliminar = document.getElementById("modal-confirmar-eliminar");
+const modalEliminarOverlay = document.getElementById("modal-eliminar-overlay");
+const confirmarEliminarTexto = document.getElementById("confirmar-eliminar-texto");
+const btnCancelarEliminar = document.getElementById("btn-cancelar-eliminar");
+const btnAceptarEliminar = document.getElementById("btn-aceptar-eliminar");
+
+const ADMIN_SESSION_KEY = "wedding_admin_session_active";
+
 // Estado en memoria del Panel Privado
 let todasLasReservas = [];
 let filtroActivo = "todos";
+let filtroMesaActivo = "";
 let textoBusqueda = "";
 let unsubscribeFirestore = null;
+let resolverConfirmacionEliminar = null;
 
-/** Abre el modal de login privado */
+/** Abre el modal de login privado (o entra directo si la sesión sigue activa en esta pestaña) */
 function abrirModal() {
+    if (sessionStorage.getItem(ADMIN_SESSION_KEY) === "1") {
+        mostrarPanelPrivado();
+        return;
+    }
     if (!modalPrivado) return;
     modalPrivado.classList.add("activo");
     document.body.style.overflow = "hidden";
@@ -849,6 +967,7 @@ async function validarCredenciales() {
 function mostrarPanelPrivado() {
     cerrarModal();
     if (!panelPrivado) return;
+    sessionStorage.setItem(ADMIN_SESSION_KEY, "1");
     document.body.classList.add("app-privada-activa");
     document.body.style.overflow = "hidden";
     panelPrivado.style.display = "flex";
@@ -859,6 +978,7 @@ function mostrarPanelPrivado() {
 /** Cierra la sesión del panel privado y vuelve a la web pública */
 function cerrarPanelPrivado() {
     if (!panelPrivado) return;
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
     if (unsubscribeFirestore) {
         unsubscribeFirestore();
         unsubscribeFirestore = null;
@@ -887,7 +1007,9 @@ function normalizarReserva(id, data) {
 
     // Si no viene el array estructurado de invitados, extraerlo del campo detalles
     if (invitados.length === 0 && asiste && detallesTexto) {
-        const limpio = detallesTexto.replace(/\nCanc[ió]n sugerida[:\s]*[^\n]*/gi, "").trim();
+        const limpio = detallesTexto
+            .replace(/\n(Canc[ió]n sugerida|Tel[ée]fono|Observaciones|Mesa\/Grupo)[:\s]*[^\n]*/gi, "")
+            .trim();
         const bloques = limpio.split(/\n(?=Invitado\s*\d+:)/i).filter(b => b.trim() !== "");
         bloques.forEach((bloque, idx) => {
             const mNombre = bloque.match(/Invitado\s*\d+:\s*([^|\n]+)/i);
@@ -907,13 +1029,28 @@ function normalizarReserva(id, data) {
         });
     }
 
-    // Extraer canción sugerida
+    // Extraer canción sugerida, teléfono, observaciones, mesa y notas internas
     let cancion = String(data.cancion || "").trim();
     if (!cancion && detallesTexto) {
         const mSong = detallesTexto.match(/Canc[ió]n sugerida[:\s]*([^\n]+)/i);
         if (mSong && mSong[1]) cancion = mSong[1].trim();
     }
     if (/^(ninguna|-)$/i.test(cancion)) cancion = "";
+
+    let telefono = String(data.telefono || "").trim();
+    if (!telefono && detallesTexto) {
+        const mPhone = detallesTexto.match(/Tel[ée]fono[:\s]*([^\n]+)/i);
+        if (mPhone && mPhone[1]) telefono = mPhone[1].trim();
+    }
+
+    let observaciones = String(data.observaciones || "").trim();
+    if (!observaciones && detallesTexto) {
+        const mObs = detallesTexto.match(/Observaciones[:\s]*([^\n]+)/i);
+        if (mObs && mObs[1]) observaciones = mObs[1].trim();
+    }
+
+    const mesa = String(data.mesa || "").trim();
+    const notasInternas = String(data.notasInternas || "").trim();
 
     // Calcular métricas por reserva
     let numInvitados = 0;
@@ -959,6 +1096,10 @@ function normalizarReserva(id, data) {
         nombres: nombresLimpio,
         nombresRaw: rawNombres,
         invitados,
+        telefono,
+        observaciones,
+        mesa,
+        notasInternas,
         detalles: detallesTexto,
         cancion,
         origen: data.origen || "web",
@@ -970,6 +1111,8 @@ function normalizarReserva(id, data) {
         conAlergiaCount,
         sinAlergiaCount,
         busCount,
+        tieneAdultosGrupo: adultosCount > 0,
+        tieneNinosGrupo: ninosCount > 0,
         tieneAlergiaGrupo: conAlergiaCount > 0,
         tieneBusGrupo: busCount > 0
     };
@@ -1031,7 +1174,7 @@ async function iniciarEscuchaReservas() {
 
 /**
  * Actualiza al instante los contadores globales del Panel Privado:
- * Total Asisten, Menú Adulto, Menú Niño, Alergias, Plazas Bus, Canciones y Píldoras de Filtro.
+ * Total Asisten, Menú Adulto, Menú Niño, Alergias, Plazas Bus, Canciones, Selector de Mesas y Píldoras de Filtro.
  */
 function actualizarContadoresGlobales(reservas) {
     let totalAsisten = 0;
@@ -1044,8 +1187,13 @@ function actualizarContadoresGlobales(reservas) {
 
     let countReservasAsisten = 0;
     let countReservasNoAsisten = 0;
+    let countReservasAdultos = 0;
+    let countReservasNinos = 0;
     let countReservasAlergia = 0;
     let countReservasBus = 0;
+
+    let asistentesSinMesa = 0;
+    const conteoPorMesa = new Map();
 
     reservas.forEach(r => {
         if (r.asiste) {
@@ -1057,8 +1205,16 @@ function actualizarContadoresGlobales(reservas) {
             totalSinAlergia += r.sinAlergiaCount;
             totalBus += r.busCount;
 
+            if (r.tieneAdultosGrupo) countReservasAdultos++;
+            if (r.tieneNinosGrupo) countReservasNinos++;
             if (r.tieneAlergiaGrupo) countReservasAlergia++;
             if (r.tieneBusGrupo) countReservasBus++;
+
+            if (r.mesa) {
+                conteoPorMesa.set(r.mesa, (conteoPorMesa.get(r.mesa) || 0) + r.numero_invitados);
+            } else {
+                asistentesSinMesa += r.numero_invitados;
+            }
 
             if (r.cancion) {
                 canciones.push({
@@ -1093,8 +1249,46 @@ function actualizarContadoresGlobales(reservas) {
     setNum("pill-count-todos", reservas.length);
     setNum("pill-count-asisten", countReservasAsisten);
     setNum("pill-count-no-asisten", countReservasNoAsisten);
+    setNum("pill-count-adultos", countReservasAdultos);
+    setNum("pill-count-ninos", countReservasNinos);
     setNum("pill-count-alergia", countReservasAlergia);
     setNum("pill-count-bus", countReservasBus);
+
+    // Actualizar selector desplegable de Mesas / Grupos con nº de personas sentadas
+    if (filtroMesaSelect) {
+        const prevMesa = filtroMesaActivo;
+        const mesasOrdenadas = Array.from(conteoPorMesa.keys()).sort((a, b) =>
+            a.localeCompare(b, "es", { numeric: true, sensitivity: "base" })
+        );
+
+        let optionsHtml = `<option value="">Todas las mesas / grupos</option>`;
+        optionsHtml += `<option value="__SIN_MESA__">🪑 Sin mesa asignada (${asistentesSinMesa} pers.)</option>`;
+        mesasOrdenadas.forEach(m => {
+            const pers = conteoPorMesa.get(m) || 0;
+            optionsHtml += `<option value="${escaparAtributo(m)}">🪑 ${escaparHTML(m)} (${pers} pers.)</option>`;
+        });
+
+        filtroMesaSelect.innerHTML = optionsHtml;
+        if (prevMesa === "__SIN_MESA__" || conteoPorMesa.has(prevMesa)) {
+            filtroMesaSelect.value = prevMesa;
+        } else {
+            filtroMesaActivo = "";
+            filtroMesaSelect.value = "";
+        }
+
+        // Añadir mesas personalizadas al datalist del formulario manual
+        const datalist = document.getElementById("lista-mesas-sugeridas");
+        if (datalist) {
+            const existentes = new Set(Array.from(datalist.querySelectorAll("option")).map(o => o.value));
+            mesasOrdenadas.forEach(m => {
+                if (!existentes.has(m)) {
+                    const opt = document.createElement("option");
+                    opt.value = m;
+                    datalist.appendChild(opt);
+                }
+            });
+        }
+    }
 
     // Actualizar lista de canciones sugeridas
     const listaCanciones = document.getElementById("lista-canciones");
@@ -1116,10 +1310,16 @@ function actualizarContadoresGlobales(reservas) {
 }
 
 /**
- * Filtra las reservas según el buscador en tiempo real y el filtro rápido activo, y renderiza las tarjetas.
+ * Filtra las reservas según el buscador en tiempo real, mesa/grupo y filtro rápido activo, y renderiza las tarjetas.
  */
 function aplicarFiltrosYRenderizar() {
     if (!privadoCards) return;
+
+    // Sincronizar estado activo visual en las tarjetas KPI
+    document.querySelectorAll(".app-kpi-card[data-quick-filter]").forEach(kpi => {
+        const kf = kpi.getAttribute("data-quick-filter");
+        kpi.classList.toggle("kpi-active", kf === filtroActivo);
+    });
 
     const queryNorm = normalizarTextoBusqueda(textoBusqueda);
 
@@ -1127,14 +1327,23 @@ function aplicarFiltrosYRenderizar() {
         // 1. Filtro por categoría rápida
         if (filtroActivo === "asisten" && !r.asiste) return false;
         if (filtroActivo === "no-asisten" && r.asiste) return false;
+        if (filtroActivo === "adultos" && (!r.asiste || !r.tieneAdultosGrupo)) return false;
+        if (filtroActivo === "ninos" && (!r.asiste || !r.tieneNinosGrupo)) return false;
         if (filtroActivo === "alergia" && (!r.asiste || !r.tieneAlergiaGrupo)) return false;
         if (filtroActivo === "bus" && (!r.asiste || !r.tieneBusGrupo)) return false;
 
-        // 2. Buscador en tiempo real
+        // 2. Filtro por Mesa / Grupo
+        if (filtroMesaActivo === "__SIN_MESA__") {
+            if (!r.asiste || Boolean(r.mesa)) return false;
+        } else if (filtroMesaActivo) {
+            if (r.mesa !== filtroMesaActivo) return false;
+        }
+
+        // 3. Buscador en tiempo real (incluye mesa, teléfono, observaciones y notas internas)
         if (queryNorm) {
             const nombresInvitados = r.invitados.map(i => `${i.nombre} ${i.alergia} ${i.menu}`).join(" ");
             const textoCompleto = normalizarTextoBusqueda(
-                `${r.nombres} ${nombresInvitados} ${r.detalles} ${r.cancion} ${r.asistencia} ${r.origen}`
+                `${r.nombres} ${nombresInvitados} ${r.mesa} ${r.telefono} ${r.observaciones} ${r.notasInternas} ${r.detalles} ${r.cancion} ${r.asistencia} ${r.origen}`
             );
             if (!textoCompleto.includes(queryNorm)) return false;
         }
@@ -1146,10 +1355,11 @@ function aplicarFiltrosYRenderizar() {
     if (resultsCountEl) {
         if (todasLasReservas.length === 0) {
             resultsCountEl.textContent = "Aún no hay reservas registradas en Firestore.";
-        } else if (filtradas.length === todasLasReservas.length && !queryNorm && filtroActivo === "todos") {
+        } else if (filtradas.length === todasLasReservas.length && !queryNorm && filtroActivo === "todos" && !filtroMesaActivo) {
             resultsCountEl.textContent = `Mostrando todas las reservas (${todasLasReservas.length})`;
         } else {
-            resultsCountEl.textContent = `Mostrando ${filtradas.length} de ${todasLasReservas.length} reservas`;
+            const personasFiltradas = filtradas.reduce((acc, item) => acc + (item.asiste ? item.numero_invitados : 0), 0);
+            resultsCountEl.textContent = `Mostrando ${filtradas.length} de ${todasLasReservas.length} reservas (${personasFiltradas} asistentes)`;
         }
     }
 
@@ -1164,7 +1374,7 @@ function renderizarTarjetasReservas(reservas) {
     privadoCards.innerHTML = "";
 
     if (!reservas || reservas.length === 0) {
-        const hayFiltros = textoBusqueda.trim() !== "" || filtroActivo !== "todos";
+        const hayFiltros = textoBusqueda.trim() !== "" || filtroActivo !== "todos" || Boolean(filtroMesaActivo);
         privadoCards.innerHTML = `
             <div class="app-empty-state">
                 <div class="app-empty-icon">
@@ -1220,11 +1430,45 @@ function renderizarTarjetasReservas(reservas) {
             `;
         }
 
+        const waNum = obtenerNumeroWhatsApp(r.telefono);
+        const contactoHtml = r.telefono ? `
+            <div class="app-card-contact-row">
+                <a href="tel:${escaparAtributo(r.telefono.replace(/\s+/g, ""))}" class="app-contact-chip chip-link" title="Llamar por teléfono">
+                    <i class="ph ph-phone-call"></i> ${escaparHTML(r.telefono)}
+                </a>
+                ${waNum ? `
+                    <a href="https://wa.me/${waNum}" target="_blank" rel="noopener noreferrer" class="app-contact-chip whatsapp chip-link" title="Abrir chat en WhatsApp">
+                        <i class="ph ph-whatsapp-logo"></i> WhatsApp
+                    </a>
+                ` : ""}
+            </div>
+        ` : "";
+
+        const observacionesHtml = r.observaciones ? `
+            <div class="app-card-note guest-note">
+                <i class="ph ph-chat-circle-text"></i>
+                <span>${escaparHTML(r.observaciones)}</span>
+            </div>
+        ` : "";
+
+        const notasInternasHtml = r.notasInternas ? `
+            <div class="app-card-note internal-note">
+                <i class="ph ph-note-pencil"></i>
+                <span><strong>Nota interna:</strong> ${escaparHTML(r.notasInternas)}</span>
+            </div>
+        ` : "";
+
         const cancionHtml = r.cancion ? `
             <div class="app-card-song">
                 <i class="ph ph-music-notes"></i>
                 <span>${escaparHTML(r.cancion)}</span>
             </div>
+        ` : "";
+
+        const mesaBadge = r.mesa ? `
+            <span class="app-mesa-badge" title="Mesa o grupo asignado">
+                <i class="ph ph-armchair"></i> ${escaparHTML(r.mesa)}
+            </span>
         ` : "";
 
         const origenBadge = r.origen === "manual"
@@ -1238,6 +1482,7 @@ function renderizarTarjetasReservas(reservas) {
                         <i class="ph ph-${r.asiste ? "check-circle" : "x-circle"}"></i>
                         ${r.asiste ? `Asiste (${r.numero_invitados})` : "No asiste"}
                     </span>
+                    ${mesaBadge}
                     ${origenBadge}
                 </div>
                 <span class="app-card-date">${escaparHTML(r.fecha || "")}</span>
@@ -1248,20 +1493,28 @@ function renderizarTarjetasReservas(reservas) {
             </div>
 
             ${invitadosMiniHtml}
+            ${contactoHtml}
+            ${observacionesHtml}
+            ${notasInternasHtml}
             ${cancionHtml}
 
             <div class="app-card-actions">
                 <button type="button" class="app-card-btn btn-ver" title="Ver detalles completos">
                     <i class="ph ph-eye"></i> Detalle
                 </button>
-                <button type="button" class="app-card-btn btn-editar" title="Editar invitados, menús, alergias o bus">
+                <button type="button" class="app-card-btn btn-editar" title="Editar invitados, mesa, menús, alergias o bus">
                     <i class="ph ph-pencil-simple"></i> Editar
                 </button>
-                <button type="button" class="app-card-btn btn-eliminar" title="Eliminar reserva de Firestore">
+                <button type="button" class="app-card-btn btn-eliminar" title="Eliminar reserva de Firestore y Excel">
                     <i class="ph ph-trash"></i> Eliminar
                 </button>
             </div>
         `;
+
+        // Evitar que al pulsar enlaces de teléfono/WhatsApp se abra el modal de detalle
+        card.querySelectorAll(".chip-link").forEach(link => {
+            link.addEventListener("click", (e) => e.stopPropagation());
+        });
 
         // Eventos de la tarjeta
         const btnVer = card.querySelector(".btn-ver");
@@ -1350,6 +1603,18 @@ function abrirModalEdicion(reserva) {
     }
     if (manualSongInput) {
         manualSongInput.value = reserva.cancion || "";
+    }
+    if (manualPhoneInput) {
+        manualPhoneInput.value = reserva.telefono || "";
+    }
+    if (manualNotesInput) {
+        manualNotesInput.value = reserva.observaciones || "";
+    }
+    if (manualMesaInput) {
+        manualMesaInput.value = reserva.mesa || "";
+    }
+    if (manualNotasInternasInput) {
+        manualNotasInternasInput.value = reserva.notasInternas || "";
     }
 
     modalReservaManual.classList.add("activo");
@@ -1474,12 +1739,41 @@ if (manualForm) {
 }
 
 /**
+ * Muestra un modal de confirmación elegante antes de eliminar una reserva.
+ */
+function solicitarConfirmacionEliminar(reserva) {
+    if (!modalConfirmarEliminar) {
+        return Promise.resolve(
+            window.confirm(`¿Seguro que deseas eliminar definitivamente la reserva de "${reserva.nombres}"?`)
+        );
+    }
+
+    if (confirmarEliminarTexto) {
+        confirmarEliminarTexto.innerHTML = `Vas a eliminar definitivamente la reserva de <strong>${escaparHTML(reserva.nombres)}</strong> tanto del panel (Firestore) como del Excel de Google Sheets.`;
+    }
+    modalConfirmarEliminar.classList.add("activo");
+
+    return new Promise((resolve) => {
+        resolverConfirmacionEliminar = resolve;
+    });
+}
+
+function cerrarModalConfirmarEliminar(resultado = false) {
+    if (modalConfirmarEliminar) {
+        modalConfirmarEliminar.classList.remove("activo");
+    }
+    if (resolverConfirmacionEliminar) {
+        const fn = resolverConfirmacionEliminar;
+        resolverConfirmacionEliminar = null;
+        fn(resultado);
+    }
+}
+
+/**
  * Elimina una reserva de Firestore y de Google Sheets previa confirmación.
  */
 async function confirmarYEliminarReserva(reserva) {
-    const confirmado = window.confirm(
-        `¿Seguro que deseas ELIMINAR definitivamente la reserva de "${reserva.nombres}"?\n\nEsta acción borrará la reserva de Firebase Firestore y del Excel (Google Sheets), actualizando los contadores al instante.`
-    );
+    const confirmado = await solicitarConfirmacionEliminar(reserva);
     if (!confirmado) return;
 
     try {
@@ -1492,6 +1786,117 @@ async function confirmarYEliminarReserva(reserva) {
         console.error("Error al eliminar reserva de Firestore:", error);
         mostrarToast("No se pudo eliminar la reserva de Firestore.", "error");
     }
+}
+
+/**
+ * Exporta en 1 clic un archivo CSV compatible con Excel España (UTF-8 BOM + separador ';')
+ * con el desglose invitado por invitado para el Catering y la empresa de Autobuses.
+ */
+function exportarInformeCatering() {
+    const asistentes = todasLasReservas.filter(r => r.asiste);
+    if (asistentes.length === 0) {
+        mostrarToast("Todavía no hay asistentes confirmados para exportar", "info");
+        return;
+    }
+
+    const escaparCSV = (valor) => {
+        const str = String(valor ?? "").replace(/\r?\n/g, " ").trim();
+        if (/[;"\n]/.test(str)) {
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+    };
+
+    // Ordenar primero por Mesa / Grupo y luego por nombre del grupo
+    const ordenadas = [...asistentes].sort((a, b) => {
+        const mesaA = a.mesa || "ZZZ_Sin asignar";
+        const mesaB = b.mesa || "ZZZ_Sin asignar";
+        const cmpMesa = mesaA.localeCompare(mesaB, "es", { numeric: true, sensitivity: "base" });
+        if (cmpMesa !== 0) return cmpMesa;
+        return a.nombres.localeCompare(b.nombres, "es", { sensitivity: "base" });
+    });
+
+    const filasCSV = [];
+    filasCSV.push([
+        "Grupo / Reserva",
+        "Mesa / Grupo",
+        "Nombre Invitado",
+        "Menú",
+        "¿Alergia?",
+        "Detalle Alergias / Intolerancias",
+        "Autobús",
+        "Teléfono Contacto",
+        "Observaciones Invitado",
+        "Notas Internas Organizadoras",
+        "Canción Sugerida",
+        "Origen",
+        "Fecha Confirmación"
+    ].map(escaparCSV).join(";"));
+
+    let totalPersonas = 0;
+    let totalAdultos = 0;
+    let totalNinos = 0;
+    let totalAlergias = 0;
+    let totalBus = 0;
+
+    ordenadas.forEach(r => {
+        const listaInv = r.invitados && r.invitados.length > 0
+            ? r.invitados
+            : [{ nombre: r.nombres, menu: "adulto", tieneAlergia: false, alergia: "Ninguna", bus: "no" }];
+
+        listaInv.forEach((inv, idx) => {
+            totalPersonas++;
+            const esNino = /ni[ñn]o|beb|infant/i.test(inv.menu || "");
+            if (esNino) totalNinos++;
+            else totalAdultos++;
+
+            const alergiaTxt = String(inv.alergia || "").trim();
+            const hayAlergia = Boolean(inv.tieneAlergia) && !/^(ninguna?|no|—|-|)$/i.test(alergiaTxt);
+            if (hayAlergia) totalAlergias++;
+
+            const usaBus = /^s[íi]/i.test(String(inv.bus || ""));
+            if (usaBus) totalBus++;
+
+            filasCSV.push([
+                r.nombres,
+                r.mesa || "Sin asignar",
+                inv.nombre || `Invitado ${idx + 1}`,
+                esNino ? "Niño" : "Adulto",
+                hayAlergia ? "SÍ" : "No",
+                hayAlergia ? alergiaTxt : "Ninguna",
+                usaBus ? "SÍ" : "No",
+                idx === 0 ? (r.telefono || "") : "",
+                idx === 0 ? (r.observaciones || "") : "",
+                idx === 0 ? (r.notasInternas || "") : "",
+                idx === 0 ? (r.cancion || "") : "",
+                r.origen === "manual" ? "Manual" : "Web",
+                r.fecha || ""
+            ].map(escaparCSV).join(";"));
+        });
+    });
+
+    // Añadir bloque resumen final para el Catering y Autobuses
+    filasCSV.push("");
+    filasCSV.push(["RESUMEN GLOBAL CATERING Y AUTOBUSES", "TOTAL"].join(";"));
+    filasCSV.push(["Total Asistentes Confirmados", totalPersonas].join(";"));
+    filasCSV.push(["Total Menús Adulto", totalAdultos].join(";"));
+    filasCSV.push(["Total Menús Niño", totalNinos].join(";"));
+    filasCSV.push(["Total Invitados con Alergias / Intolerancias", totalAlergias].join(";"));
+    filasCSV.push(["Total Plazas de Autobús", totalBus].join(";"));
+
+    const contenido = "\uFEFF" + filasCSV.join("\r\n");
+    const blob = new Blob([contenido], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const hoy = new Date().toISOString().slice(0, 10);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Catering_Boda_Lorena_y_Estefania_${hoy}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+    mostrarToast(`Informe exportado (${totalPersonas} asistentes)`, "success");
 }
 
 // ==========================================================================
@@ -1575,7 +1980,44 @@ function abrirModalDetalle(reserva) {
             <div class="detalle-field-label">🌐 Origen</div>
             <div class="detalle-field-value">${reserva.origen === "manual" ? "Registro Manual (Organizadoras)" : "Formulario Web Público"}</div>
         </div>
+        <div class="detalle-field fade-in">
+            <div class="detalle-field-label">🪑 Mesa / Grupo</div>
+            <div class="detalle-field-value">${escaparHTML(reserva.mesa || "Sin asignar")}</div>
+        </div>
     `;
+
+    if (reserva.telefono) {
+        const waNum = obtenerNumeroWhatsApp(reserva.telefono);
+        extraFieldsHtml += `
+            <div class="detalle-field fade-in">
+                <div class="detalle-field-label">📞 Teléfono de contacto</div>
+                <div class="detalle-field-value">
+                    <a href="tel:${escaparAtributo(reserva.telefono.replace(/\s+/g, ""))}" style="color:var(--primary); font-weight:600; text-decoration:none;">
+                        ${escaparHTML(reserva.telefono)}
+                    </a>
+                    ${waNum ? ` · <a href="https://wa.me/${waNum}" target="_blank" rel="noopener noreferrer" style="color:#059669; font-weight:600; text-decoration:none;">Abrir WhatsApp</a>` : ""}
+                </div>
+            </div>
+        `;
+    }
+
+    if (reserva.observaciones) {
+        extraFieldsHtml += `
+            <div class="detalle-field fade-in">
+                <div class="detalle-field-label">💬 Observaciones del invitado</div>
+                <div class="detalle-field-value">${escaparHTML(reserva.observaciones)}</div>
+            </div>
+        `;
+    }
+
+    if (reserva.notasInternas) {
+        extraFieldsHtml += `
+            <div class="detalle-field fade-in">
+                <div class="detalle-field-label">📝 Nota interna (Organizadoras)</div>
+                <div class="detalle-field-value">${escaparHTML(reserva.notasInternas)}</div>
+            </div>
+        `;
+    }
 
     if (reserva.cancion) {
         extraFieldsHtml += `
@@ -1651,6 +2093,15 @@ function escaparAtributo(str) {
     return escaparHTML(str);
 }
 
+function obtenerNumeroWhatsApp(telefono) {
+    const digitos = String(telefono || "").replace(/\D/g, "");
+    if (!digitos) return "";
+    if (digitos.length === 9 && /^[6789]/.test(digitos)) {
+        return `34${digitos}`;
+    }
+    return digitos.length >= 9 ? digitos : "";
+}
+
 // Listeners de Acceso Privado
 if (btnAreaPrivada) btnAreaPrivada.addEventListener("click", abrirModal);
 if (modalOverlay) modalOverlay.addEventListener("click", cerrarModal);
@@ -1702,15 +2153,29 @@ if (filtrosContainer) {
     });
 }
 
-// Click en tarjetas KPI con data-quick-filter para filtrar rápidamente
+// Click en tarjetas KPI con data-quick-filter para filtrar rápidamente (pulsar de nuevo vuelve a "Todos")
 document.querySelectorAll(".app-kpi-card[data-quick-filter]").forEach(kpi => {
     kpi.addEventListener("click", function () {
         const targetFilter = this.getAttribute("data-quick-filter");
         if (!targetFilter || !filtrosContainer) return;
-        const pill = filtrosContainer.querySelector(`.app-filter-pill[data-filter="${targetFilter}"]`);
+        const nextFilter = filtroActivo === targetFilter ? "todos" : targetFilter;
+        const pill = filtrosContainer.querySelector(`.app-filter-pill[data-filter="${nextFilter}"]`);
         if (pill) pill.click();
     });
 });
+
+// Selector de filtro por Mesa / Grupo
+if (filtroMesaSelect) {
+    filtroMesaSelect.addEventListener("change", function () {
+        filtroMesaActivo = this.value || "";
+        aplicarFiltrosYRenderizar();
+    });
+}
+
+// Botón de exportar informe Excel/CSV para Catering y Autobuses
+if (btnExportarCatering) {
+    btnExportarCatering.addEventListener("click", exportarInformeCatering);
+}
 
 // Mostrar / Ocultar cajón de canciones recomendadas
 const btnToggleCanciones = document.getElementById("btn-toggle-canciones");
@@ -1739,10 +2204,17 @@ if (btnCancelarManual) btnCancelarManual.addEventListener("click", cerrarModalMa
 if (modalDetalleOverlay) modalDetalleOverlay.addEventListener("click", cerrarModalDetalle);
 if (btnCerrarDetalle) btnCerrarDetalle.addEventListener("click", cerrarModalDetalle);
 
+// Listeners del Modal Confirmar Eliminación
+if (modalEliminarOverlay) modalEliminarOverlay.addEventListener("click", () => cerrarModalConfirmarEliminar(false));
+if (btnCancelarEliminar) btnCancelarEliminar.addEventListener("click", () => cerrarModalConfirmarEliminar(false));
+if (btnAceptarEliminar) btnAceptarEliminar.addEventListener("click", () => cerrarModalConfirmarEliminar(true));
+
 // Cerrar modales con Escape
 document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") {
-        if (modalReservaManual && modalReservaManual.classList.contains("activo")) {
+        if (modalConfirmarEliminar && modalConfirmarEliminar.classList.contains("activo")) {
+            cerrarModalConfirmarEliminar(false);
+        } else if (modalReservaManual && modalReservaManual.classList.contains("activo")) {
             cerrarModalManual();
         } else if (modalDetalle && modalDetalle.classList.contains("activo")) {
             cerrarModalDetalle();
@@ -1751,3 +2223,8 @@ document.addEventListener("keydown", function (e) {
         }
     }
 });
+
+// Restaurar sesión del Panel de Organizadoras si recargan la pestaña
+if (sessionStorage.getItem(ADMIN_SESSION_KEY) === "1") {
+    mostrarPanelPrivado();
+}

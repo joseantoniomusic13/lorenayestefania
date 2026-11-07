@@ -2198,10 +2198,11 @@ footer p {
   .app-topbar-actions {
     width: 100%;
     justify-content: space-between;
+    flex-wrap: wrap;
   }
 
   .app-topbar-actions .app-btn {
-    flex: 1;
+    flex: 1 1 auto;
   }
 
   .app-main-container {
@@ -2222,5 +2223,371 @@ footer p {
   .app-modal-header,
   .app-modal-body {
     padding: 18px;
+  }
+}
+
+/* ==========================================================================
+   Mejoras Web Pública: Calendario, Ubicación GPS, Dress Code y Textareas
+   ========================================================================== */
+.hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 25px;
+}
+
+.hero-actions .btn {
+  margin-top: 0;
+}
+
+.calendar-dropdown-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.btn-hero-secondary {
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--primary);
+  border: 1.5px solid rgba(131, 52, 65, 0.35);
+  padding: 15px 24px;
+  border-radius: 30px;
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: all 0.3s ease;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.btn-hero-secondary:hover {
+  background: white;
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(131, 52, 65, 0.18);
+}
+
+.calendar-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 240px;
+  background: white;
+  border-radius: 16px;
+  padding: 8px;
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.16);
+  border: 1px solid rgba(131, 52, 65, 0.14);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: fadeIn 0.2s ease forwards;
+}
+
+.calendar-menu a,
+.calendar-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+  text-align: left;
+}
+
+.calendar-menu a i,
+.calendar-menu button i {
+  font-size: 1.2rem;
+  color: var(--primary);
+}
+
+.calendar-menu a:hover,
+.calendar-menu button:hover {
+  background: var(--bg-light);
+  color: var(--primary);
+}
+
+.location-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+.location-actions .btn,
+.location-actions .btn-outline {
+  margin-top: 0;
+}
+
+.dress-code-cards {
+  max-width: 720px;
+  margin: 0 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 30px;
+}
+
+.dress-card-all {
+  border-top: 4px solid var(--primary) !important;
+  background: var(--bg-color) !important;
+}
+
+.dress-card-her {
+  border-top: 4px solid var(--text-dark) !important;
+  background: var(--bg-color) !important;
+}
+
+.textarea-group i {
+  top: 22px;
+  transform: none;
+}
+
+.input-group textarea {
+  width: 100%;
+  padding: 14px 16px 14px 45px;
+  border: 1px solid #e0dfdb;
+  border-radius: 12px;
+  font-family: var(--font-body);
+  font-size: 0.96rem;
+  background: var(--bg-color);
+  color: var(--text-dark);
+  transition: all 0.3s ease;
+  resize: vertical;
+  min-height: 68px;
+}
+
+.input-group textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(173, 0, 79, 0.1);
+  background: white;
+}
+
+/* ==========================================================================
+   Mejoras Panel Privado: Exportar Catering, Mesas, Notas, KPIs y Confirmación
+   ========================================================================== */
+.app-btn-export {
+  background: #059669;
+  color: white;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.28);
+}
+
+.app-btn-export:hover {
+  background: #047857;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(5, 150, 105, 0.38);
+}
+
+.app-kpi-card.kpi-active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(131, 52, 65, 0.16), 0 8px 20px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
+}
+
+.app-toolbar {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.app-toolbar-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.app-mesa-filter-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 220px;
+}
+
+.app-mesa-filter-box > i {
+  position: absolute;
+  left: 13px;
+  color: var(--primary);
+  font-size: 1.1rem;
+  pointer-events: none;
+}
+
+.app-mesa-select {
+  width: 100%;
+  padding: 11px 34px 11px 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-weight: 600;
+  background-color: #f8fafc;
+  color: #1e293b;
+  cursor: pointer;
+}
+
+.app-mesa-select:focus {
+  outline: none;
+  background-color: white;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(131, 52, 65, 0.12);
+}
+
+.app-mesa-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: #fdf2f4;
+  color: #833441;
+  border: 1px solid rgba(131, 52, 65, 0.2);
+}
+
+.app-card-contact-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-contact-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.app-contact-chip:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.app-contact-chip.whatsapp {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.app-contact-chip.whatsapp:hover {
+  background: #d1fae5;
+}
+
+.app-card-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 0.81rem;
+  line-height: 1.4;
+  padding: 8px 11px;
+  border-radius: 8px;
+}
+
+.app-card-note i {
+  font-size: 1rem;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.app-card-note.guest-note {
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.app-card-note.internal-note {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.app-org-internal-section {
+  background: #fffdf7;
+  border: 1px dashed #f59e0b;
+}
+
+.app-confirm-delete-box {
+  max-width: 420px;
+  text-align: center;
+}
+
+.app-confirm-delete-box h3 {
+  margin: 0 0 8px;
+  font-size: 1.4rem;
+  color: #0f172a;
+}
+
+.app-confirm-delete-box p {
+  margin: 0 0 20px;
+  color: #475569;
+  font-size: 0.93rem;
+}
+
+.delete-icon-wrap {
+  background: #fef2f2 !important;
+  color: #dc2626 !important;
+}
+
+.delete-icon-wrap i {
+  color: #dc2626 !important;
+}
+
+.app-confirm-delete-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.app-confirm-delete-actions .app-btn {
+  flex: 1;
+}
+
+@media (max-width: 768px) {
+  .dress-code-cards {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .hero-actions,
+  .location-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .hero-actions .btn,
+  .btn-hero-secondary,
+  .location-actions .btn,
+  .location-actions .btn-outline {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .app-mesa-filter-box {
+    width: 100%;
   }
 }

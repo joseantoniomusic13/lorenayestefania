@@ -2349,7 +2349,7 @@ footer p {
 }
 
 .dress-card-her {
-  border-top: 4px solid var(--text-dark) !important;
+  border-top: 4px solid var(--primary) !important;
   background: var(--bg-color) !important;
 }
 

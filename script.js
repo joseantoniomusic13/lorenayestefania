@@ -740,6 +740,12 @@ function construirDatosReserva(formElement, countVal, prefix = "public", origen 
                 invObj.mesa = mesaInvitado;
                 invObj.mesaId = mesaExistente ? mesaExistente.id : "";
 
+                const prevInvList = Array.isArray(opcionesExtra.invitadosPrevios) ? opcionesExtra.invitadosPrevios : [];
+                const prevItem = prevInvList[i - 1];
+                if (mesaInvitado && prevItem && prevItem.aliasMesa) {
+                    invObj.aliasMesa = prevItem.aliasMesa;
+                }
+
                 if (mesaInvitado) {
                     lineaDetalle += ` | Mesa: ${mesaInvitado}`;
                 }
@@ -942,7 +948,8 @@ if (rsvpForm) {
                                         return {
                                             ...inv,
                                             mesa: mesaHeredada,
-                                            mesaId: prevInv.mesaId || ""
+                                            mesaId: prevInv.mesaId || "",
+                                            aliasMesa: prevInv.aliasMesa || ""
                                         };
                                     }
                                 }
@@ -1378,11 +1385,14 @@ function normalizarMesa(id, data = {}) {
     const miembrosPrevistos = rawMiembros
         .map((m, idx) => {
             if (typeof m === "string") {
-                return { id: `mp_${idx}`, nombre: m.trim() };
+                return { id: `mp_${idx}`, nombre: m.trim(), estadoManual: "pendiente" };
             }
+            const estRaw = String((m && m.estadoManual) || "pendiente").toLowerCase();
+            const estadoManual = estRaw === "confirmado" || estRaw === "no-asiste" ? estRaw : "pendiente";
             return {
                 id: String(m && m.id ? m.id : `mp_${idx}`),
-                nombre: String(m && m.nombre ? m.nombre : "").trim()
+                nombre: String(m && m.nombre ? m.nombre : "").trim(),
+                estadoManual
             };
         })
         .filter(m => m.nombre !== "");
@@ -1417,7 +1427,8 @@ function normalizarReserva(id, data) {
         ? data.invitados.map(inv => ({
             ...inv,
             mesa: inv && inv.mesa !== undefined ? String(inv.mesa || "").trim() : mesaLegacyReserva,
-            mesaId: String((inv && inv.mesaId) || "").trim()
+            mesaId: String((inv && inv.mesaId) || "").trim(),
+            aliasMesa: String((inv && inv.aliasMesa) || "").trim()
         }))
         : [];
 
@@ -1550,11 +1561,11 @@ function normalizarReserva(id, data) {
 }
 
 /**
- * Cruza en tiempo real las mesas creadas con todas las reservas recibidas:
- * - Asigna "Confirmado" a invitados confirmados sentados en esa mesa (explícitos o emparejados por nombre).
- * - Asigna "NO ASISTE" si la persona asignada/prevista indicó en su reserva que no puede ir.
- * - Asigna "FALTA POR CONFIRMAR" si la persona está en la mesa pero aún no ha reservado.
- * - Detecta todos los asistentes confirmados que faltan por asignarse a una mesa.
+ * Calcula la distribución de mesas de forma 100 % controlada por las novias (sin auto-emparejar nombres):
+ * - Las reservas de la web entran SIEMPRE en "Pendientes de mesa" hasta que las novias las ubiquen o vinculen.
+ * - "Confirmado": invitados de reservas asignados manualmente a la mesa por las novias (o miembros marcados como Confirmado).
+ * - "FALTA POR CONFIRMAR": personas previstas escritas en la mesa que aún están pendientes de confirmación/vinculación.
+ * - "NO ASISTE": personas asignadas a la mesa que indicaron no poder ir (o marcadas manualmente como baja).
  */
 function calcularDistribucionMesas(mesasBase, reservas) {
     const mesasCalc = mesasBase.map((m, idx) => ({
@@ -1601,8 +1612,8 @@ function calcularDistribucionMesas(mesasBase, reservas) {
     };
 
     const asistentesFlat = [];
-    const bajasPorNombreNorm = new Map();
     const bajasConMesaExplicita = [];
+    const reservasNoAsisten = [];
 
     reservas.forEach(r => {
         if (r.asiste) {
@@ -1615,7 +1626,8 @@ function calcularDistribucionMesas(mesasBase, reservas) {
                     alergia: "Ninguna",
                     bus: "no",
                     mesa: r.mesa || "",
-                    mesaId: ""
+                    mesaId: "",
+                    aliasMesa: ""
                 }];
 
             listaInv.forEach((inv, idx) => {
@@ -1638,18 +1650,8 @@ function calcularDistribucionMesas(mesasBase, reservas) {
                 });
             });
         } else {
-            // Reserva con "No asisten": indexar nombres individuales y completos
+            reservasNoAsisten.push(r);
             const candidatos = dividirNombresPersonas(r.nombres);
-            const normCompleto = normalizarNombrePersona(r.nombres);
-            if (normCompleto && !bajasPorNombreNorm.has(normCompleto)) {
-                bajasPorNombreNorm.set(normCompleto, r);
-            }
-            candidatos.forEach(parte => {
-                const normP = normalizarNombrePersona(parte);
-                if (normP && !bajasPorNombreNorm.has(normP)) {
-                    bajasPorNombreNorm.set(normP, r);
-                }
-            });
 
             if (Array.isArray(r.noAsistenMesas) && r.noAsistenMesas.length > 0) {
                 r.noAsistenMesas.forEach((item, bIdx) => {
@@ -1687,9 +1689,8 @@ function calcularDistribucionMesas(mesasBase, reservas) {
 
     const assignedGuestKeys = new Set();
     const guestEffectiveMesaMap = new Map();
-    const consumedMpPorMesa = new Map();
 
-    // PASO 1: Invitados confirmados asignados explícitamente a una mesa desde su reserva
+    // PASO 1: Invitados confirmados ubicados MANUALMENTE en una mesa por las novias
     asistentesFlat.forEach(g => {
         if (!g.mesaExplicita) return;
         const m = g.mesaExplicita;
@@ -1700,99 +1701,43 @@ function calcularDistribucionMesas(mesasBase, reservas) {
             orden: m.ordenVisual
         });
 
-        let mpConsumido = null;
-        if (g.nombreNorm && Array.isArray(m.miembrosPrevistos)) {
-            const usados = consumedMpPorMesa.get(m.id) || new Set();
-            const matchMp = m.miembrosPrevistos.find(
-                mp => !usados.has(mp.id) && normalizarNombrePersona(mp.nombre) === g.nombreNorm
-            );
-            if (matchMp) {
-                usados.add(matchMp.id);
-                consumedMpPorMesa.set(m.id, usados);
-                mpConsumido = matchMp.id;
-            }
-        }
-
         m.asientos.push({
             tipoAsiento: "confirmado",
             nombre: g.nombre,
+            aliasMesa: g.inv.aliasMesa || "",
             reservaId: g.reserva.id,
             guestIndex: g.guestIndex,
             inv: g.inv,
             reserva: g.reserva,
-            miembroPrevistoId: mpConsumido,
+            miembroPrevistoId: null,
+            esReserva: true,
+            esMiembroPrevisto: false,
             esExplicito: true
         });
     });
 
-    // PASO 2: Miembros previstos anotados manualmente en cada mesa por las novias
+    // PASO 2: Personas previstas anotadas manualmente en cada mesa por las novias (sin auto-cruce por nombre)
     mesasCalc.forEach(m => {
-        const usadosMp = consumedMpPorMesa.get(m.id) || new Set();
-        const nombresBajaYaEnMesa = new Set();
-
         m.miembrosPrevistos.forEach(mp => {
-            if (usadosMp.has(mp.id)) return;
-            const normMp = normalizarNombrePersona(mp.nombre);
-            if (!normMp) return;
+            const estado = mp.estadoManual === "confirmado" || mp.estadoManual === "no-asiste"
+                ? mp.estadoManual
+                : "pendiente";
 
-            // 2a. ¿Ha confirmado asistencia algún invitado con este nombre aún sin mesa explícita?
-            const matchAsistente = asistentesFlat.find(
-                g => !assignedGuestKeys.has(g.key) && g.nombreNorm === normMp
-            );
-
-            if (matchAsistente) {
-                assignedGuestKeys.add(matchAsistente.key);
-                guestEffectiveMesaMap.set(matchAsistente.key, {
-                    id: m.id,
-                    nombre: m.nombre,
-                    orden: m.ordenVisual
-                });
-                m.asientos.push({
-                    tipoAsiento: "confirmado",
-                    nombre: matchAsistente.nombre,
-                    reservaId: matchAsistente.reserva.id,
-                    guestIndex: matchAsistente.guestIndex,
-                    inv: matchAsistente.inv,
-                    reserva: matchAsistente.reserva,
-                    miembroPrevistoId: mp.id,
-                    esExplicito: false
-                });
-                return;
-            }
-
-            // 2b. ¿Ha respondido en una reserva diciendo que NO puede asistir?
-            if (bajasPorNombreNorm.has(normMp)) {
-                const resBaja = bajasPorNombreNorm.get(normMp);
-                nombresBajaYaEnMesa.add(normMp);
-                m.asientos.push({
-                    tipoAsiento: "no-asiste",
-                    nombre: mp.nombre,
-                    reservaId: resBaja.id,
-                    reserva: resBaja,
-                    miembroPrevistoId: mp.id,
-                    esBajaExplicita: false
-                });
-                return;
-            }
-
-            // 2c. Aún no ha reservado -> FALTA POR CONFIRMAR
             m.asientos.push({
-                tipoAsiento: "pendiente",
+                tipoAsiento: estado,
                 nombre: mp.nombre,
-                miembroPrevistoId: mp.id
+                miembroPrevistoId: mp.id,
+                estadoManual: estado,
+                esReserva: false,
+                esMiembroPrevisto: true
             });
         });
-
-        m._nombresBajaYaEnMesa = nombresBajaYaEnMesa;
     });
 
-    // PASO 3: Personas que tenían mesa asignada en una reserva y marcaron "No asisten"
+    // PASO 3: Personas que tenían mesa asignada por las novias y cuya reserva indica "No asisten"
     bajasConMesaExplicita.forEach(b => {
         const m = b.mesaDestino;
         if (!m) return;
-        const normB = normalizarNombrePersona(b.nombre);
-        if (normB && m._nombresBajaYaEnMesa && m._nombresBajaYaEnMesa.has(normB)) return;
-        if (normB && m._nombresBajaYaEnMesa) m._nombresBajaYaEnMesa.add(normB);
 
         m.asientos.push({
             tipoAsiento: "no-asiste",
@@ -1801,11 +1746,12 @@ function calcularDistribucionMesas(mesasBase, reservas) {
             bajaIndex: b.bajaIndex,
             reserva: b.reserva,
             miembroPrevistoId: null,
+            esMiembroPrevisto: false,
             esBajaExplicita: true
         });
     });
 
-    // PASO 4: Lista de asistentes confirmados que aún faltan por asignarse en mesa
+    // PASO 4: Todos los asistentes confirmados sin mesa manual quedan en Pendientes para que las novias organicen
     const pendientesDeMesa = asistentesFlat.filter(g => !assignedGuestKeys.has(g.key));
 
     // PASO 5: Métricas por cada mesa y totales globales
@@ -1814,7 +1760,6 @@ function calcularDistribucionMesas(mesasBase, reservas) {
     let totalNoAsistenEnMesa = 0;
 
     mesasCalc.forEach(m => {
-        delete m._nombresBajaYaEnMesa;
         m.confirmadosCount = m.asientos.filter(a => a.tipoAsiento === "confirmado").length;
         m.pendientesCount = m.asientos.filter(a => a.tipoAsiento === "pendiente").length;
         m.noAsistenCount = m.asientos.filter(a => a.tipoAsiento === "no-asiste").length;
@@ -1833,6 +1778,7 @@ function calcularDistribucionMesas(mesasBase, reservas) {
         mesasPorId,
         mesasPorNombreNorm,
         pendientesDeMesa,
+        reservasNoAsisten,
         guestEffectiveMesaMap,
         totales: {
             totalMesas: mesasCalc.length,
@@ -2581,42 +2527,6 @@ async function asegurarMesasNuevasEnFirestore(db, mesasCollection, reservaObj) {
     }
 }
 
-/**
- * Si al editar una reserva una persona cambia de mesa o se deja sin mesa,
- * limpia cualquier placeholder previo con su mismo nombre en la mesa antigua para evitar duplicados.
- */
-async function limpiarPlaceholdersAlCambiarMesa(db, mesasCollection, reservaExistente, reservaNueva) {
-    if (!reservaExistente || !reservaExistente.asiste) return;
-    const prevInv = reservaExistente.invitados || [];
-    const nuevosInv = reservaNueva.invitados || [];
-
-    for (let idx = 0; idx < prevInv.length; idx++) {
-        const mesaAntigua = obtenerNombreMesaEfectiva(reservaExistente, idx, prevInv[idx]);
-        if (!mesaAntigua) continue;
-
-        const normNombre = normalizarNombrePersona(prevInv[idx].nombre);
-        const nuevoItem = nuevosInv.find(n => normalizarNombrePersona(n.nombre) === normNombre) || nuevosInv[idx];
-        const mesaNueva = nuevoItem ? String(nuevoItem.mesa || "").trim() : "";
-
-        if (normalizarNombrePersona(mesaAntigua) !== normalizarNombrePersona(mesaNueva)) {
-            const docMesaAntigua = todasLasMesas.find(
-                m => normalizarNombrePersona(m.nombre) === normalizarNombrePersona(mesaAntigua)
-            );
-            if (docMesaAntigua && normNombre) {
-                const filtrados = docMesaAntigua.miembrosPrevistos.filter(
-                    mp => normalizarNombrePersona(mp.nombre) !== normNombre
-                );
-                if (filtrados.length !== docMesaAntigua.miembrosPrevistos.length) {
-                    await updateDoc(doc(db, mesasCollection, docMesaAntigua.id), {
-                        miembrosPrevistos: filtrados,
-                        updatedAt: Date.now()
-                    });
-                }
-            }
-        }
-    }
-}
-
 // Guardar Reserva Manual o Edición en Firestore
 if (manualForm) {
     manualForm.addEventListener("submit", async function (e) {
@@ -2665,7 +2575,8 @@ if (manualForm) {
         }
 
         const reservaObj = construirDatosReserva(manualForm, countVal, "manual", origenReserva, {
-            noAsistenMesasPrevias
+            noAsistenMesasPrevias,
+            invitadosPrevios: existente ? existente.invitados : []
         });
 
         try {
@@ -2674,7 +2585,6 @@ if (manualForm) {
             await asegurarMesasNuevasEnFirestore(db, mesasCollection, reservaObj);
 
             if (esEdicion) {
-                await limpiarPlaceholdersAlCambiarMesa(db, mesasCollection, existente, reservaObj);
                 await updateDoc(doc(db, reservasCollection, editId), reservaObj);
                 enviarEspejoGoogleSheets(reservaObj, "[EDITADO PANEL]", {
                     accion: "actualizar",
@@ -3144,7 +3054,7 @@ function generarCroquisVisualMesaHTML(mesa) {
 function renderizarVistaMesas() {
     if (!distribucionActual) return;
 
-    const { mesas, pendientesDeMesa, totales } = distribucionActual;
+    const { mesas, pendientesDeMesa, reservasNoAsisten = [], totales } = distribucionActual;
 
     const setTexto = (id, val) => {
         const el = document.getElementById(id);
@@ -3170,14 +3080,41 @@ function renderizarVistaMesas() {
                 <div class="pendientes-empty-ok">
                     <i class="ph ph-${hayAlgunAsistente ? "seal-check" : "info"}" style="font-size:1.3rem;"></i>
                     <span>${hayAlgunAsistente
-                        ? "🎉 ¡Todos los asistentes confirmados tienen ya su sitio asignado en una mesa!"
-                        : "Cuando lleguen reservas confirmadas sin mesa asignada, aparecerán aquí para ubicarlas en 1 clic."}</span>
+                        ? "🎉 ¡Todos los asistentes confirmados tienen ya su mesa asignada por vosotras!"
+                        : "Todas las reservas de la web aparecerán aquí en pendiente para que solo vosotras organicéis las mesas."}</span>
                 </div>
             `;
         } else {
-            const opcionesMesasHtml = mesas.map(m =>
-                `<option value="${escaparAtributo(m.nombre)}">🪑 ${escaparHTML(m.ordenVisual + ". " + m.nombre)} (${m.ocupadosActivos}/${m.capacidad})</option>`
+            const opcionesMesasDirectas = mesas.map(m =>
+                `<option value="mesa:${escaparAtributo(m.nombre)}">🪑 ${escaparHTML(m.ordenVisual + ". " + m.nombre)} (${m.ocupadosActivos}/${m.capacidad})</option>`
             ).join("");
+
+            const sitiosPrevistosPendientes = [];
+            mesas.forEach(m => {
+                if (m.esVirtual) return;
+                (m.miembrosPrevistos || []).forEach(mp => {
+                    if (mp.estadoManual !== "confirmado" && mp.estadoManual !== "no-asiste") {
+                        sitiosPrevistosPendientes.push({
+                            mesaId: m.id,
+                            mesaNombre: m.nombre,
+                            mpId: mp.id,
+                            mpNombre: mp.nombre
+                        });
+                    }
+                });
+            });
+
+            const opcionesVincularPrevistos = sitiosPrevistosPendientes.length > 0
+                ? `<optgroup label="🔗 Es una persona prevista en mesa (sustituir y confirmar)">
+                    ${sitiosPrevistosPendientes.map(sp =>
+                        `<option value="vincular_mp:${escaparAtributo(sp.mesaId)}:${escaparAtributo(sp.mpId)}">🔗 ${escaparHTML(sp.mesaNombre)} → «${escaparHTML(sp.mpNombre)}»</option>`
+                    ).join("")}
+                   </optgroup>`
+                : "";
+
+            const bloqueOpcionesPendiente = opcionesVincularPrevistos
+                ? `<optgroup label="🪑 Añadir asiento en mesa">${opcionesMesasDirectas}</optgroup>${opcionesVincularPrevistos}`
+                : opcionesMesasDirectas;
 
             listaPendientesMesa.innerHTML = pendientesDeMesa.map(item => {
                 const esNino = /ni[ñn]o|beb|infant/i.test(item.inv.menu || "");
@@ -3201,7 +3138,7 @@ function renderizarVistaMesas() {
                                     data-guest-idx="${item.guestIndex}"
                                     aria-label="Asignar mesa a ${escaparAtributo(item.nombre)}">
                                 <option value="">${mesas.length > 0 ? "Asignar a una mesa..." : "Crea primero una mesa abajo"}</option>
-                                ${opcionesMesasHtml}
+                                ${bloqueOpcionesPendiente}
                             </select>
                             <button type="button"
                                     class="mesa-icon-btn btn-edit-res-from-pendiente"
@@ -3216,10 +3153,17 @@ function renderizarVistaMesas() {
 
             listaPendientesMesa.querySelectorAll(".pendiente-assign-select").forEach(sel => {
                 sel.addEventListener("change", function () {
-                    const nombreMesa = this.value;
-                    if (!nombreMesa) return;
+                    const valor = this.value;
+                    if (!valor) return;
                     const resId = this.getAttribute("data-reserva-id");
                     const gIdx = parseInt(this.getAttribute("data-guest-idx"), 10);
+
+                    if (valor.startsWith("vincular_mp:")) {
+                        const [, mesaId, mpId] = valor.split(":");
+                        vincularMiembroPrevistoConInvitado(mesaId, mpId, resId, gIdx);
+                        return;
+                    }
+                    const nombreMesa = valor.startsWith("mesa:") ? valor.slice(5) : valor;
                     asignarInvitadoIndividualAMesa(resId, gIdx, nombreMesa);
                 });
             });
@@ -3247,7 +3191,7 @@ function renderizarVistaMesas() {
         if (filtroVistaMesas === "con-bajas" && m.noAsistenCount <= 0) return false;
 
         if (queryNorm) {
-            const nombresAsientos = m.asientos.map(a => a.nombre).join(" ");
+            const nombresAsientos = m.asientos.map(a => `${a.nombre} ${a.aliasMesa || ""}`).join(" ");
             const textoMesa = normalizarTextoBusqueda(`${m.nombre} ${m.nota} ${nombresAsientos}`);
             if (!textoMesa.includes(queryNorm)) return false;
         }
@@ -3261,7 +3205,7 @@ function renderizarVistaMesas() {
                     <i class="ph ph-armchair"></i>
                 </div>
                 <h3>Aún no habéis creado ninguna mesa</h3>
-                <p>Cread vuestra lista ordenada de mesas y anotad qué invitados irán en cada una. Conforme vayan llegando las reservas de la web, sus sitios cambiarán solos a <strong>Confirmado</strong> o <strong>NO ASISTE</strong>.</p>
+                <p>Cread vuestra lista ordenada de mesas y anotad quién irá en cada una. Todas las reservas de la web quedan en pendientes para que solo vosotras organicéis y confirméis cada mesa manualmente.</p>
                 <div class="mesas-empty-actions">
                     <button type="button" class="app-btn app-btn-primary" id="btn-empty-crear-mesa">
                         <i class="ph ph-plus-circle"></i> Crear primera mesa
@@ -3292,6 +3236,38 @@ function renderizarVistaMesas() {
         return;
     }
 
+    const optgroupVincularPendientesHtml = pendientesDeMesa.length > 0
+        ? `<optgroup label="🔗 Vincular con invitado pendiente">
+            ${pendientesDeMesa.map(p => {
+                const sub = p.reserva.nombres && p.reserva.nombres !== p.nombre ? ` (${p.reserva.nombres})` : "";
+                return `<option value="vincular:${escaparAtributo(p.reserva.id)}:${p.guestIndex}">🔗 Es: ${escaparHTML(p.nombre + sub)}</option>`;
+            }).join("")}
+           </optgroup>`
+        : "";
+
+    const optgroupVincularBajasHtml = reservasNoAsisten.length > 0
+        ? `<optgroup label="✕ Vincular con reserva No Asiste">
+            ${reservasNoAsisten.map(rb =>
+                `<option value="vincular_baja:${escaparAtributo(rb.id)}">✕ Baja: ${escaparHTML(rb.nombres)}</option>`
+            ).join("")}
+           </optgroup>`
+        : "";
+
+    const generarSelectorOrganizarMpHTML = (mesaId, mpId, estadoActual) => `
+        <select class="seat-mp-organize-select"
+                data-mesa-id="${escaparAtributo(mesaId)}"
+                data-mp-id="${escaparAtributo(mpId || "")}"
+                title="Cambiar estado manualmente o vincular con una reserva recibida">
+            <optgroup label="📌 Estado manual (Novias)">
+                <option value="estado:pendiente" ${estadoActual === "pendiente" ? "selected" : ""}>⏳ Falta por confirmar</option>
+                <option value="estado:confirmado" ${estadoActual === "confirmado" ? "selected" : ""}>✓ Confirmado (manual)</option>
+                <option value="estado:no-asiste" ${estadoActual === "no-asiste" ? "selected" : ""}>✕ No asiste (baja)</option>
+            </optgroup>
+            ${optgroupVincularPendientesHtml}
+            ${optgroupVincularBajasHtml}
+        </select>
+    `;
+
     mesasFiltradas.forEach((m) => {
         const realIdx = todasLasMesas.findIndex(tm => tm.id === m.id);
         const puedeSubir = !m.esVirtual && realIdx > 0;
@@ -3313,14 +3289,54 @@ function renderizarVistaMesas() {
 
         let numSillaActiva = 0;
         const filasAsientosHtml = asientosOrdenados.length === 0
-            ? `<div class="mesa-seats-empty">Mesa vacía. Añade abajo invitados previstos o asígnalos desde sus reservas.</div>`
+            ? `<div class="mesa-seats-empty">Mesa vacía. Anotad abajo a quién tenéis pensado sentar aquí o asignad invitados pendientes.</div>`
             : asientosOrdenados.map(asiento => {
                 if (asiento.tipoAsiento === "confirmado") {
                     numSillaActiva++;
+
+                    // Caso A: Persona prevista marcada manualmente como Confirmado por las novias
+                    if (asiento.esMiembroPrevisto) {
+                        return `
+                            <div class="seat-row is-confirmado">
+                                <div class="seat-main-info">
+                                    <span class="seat-num">${numSillaActiva}</span>
+                                    <div class="seat-person-details">
+                                        <span class="seat-person-name">${escaparHTML(asiento.nombre)}</span>
+                                        <div class="seat-person-meta">
+                                            <span>Confirmado manualmente por las novias</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="seat-right-controls">
+                                    <span class="seat-status-pill confirmado">✓ Confirmado</span>
+                                    ${generarSelectorOrganizarMpHTML(m.id, asiento.miembroPrevistoId, "confirmado")}
+                                    <button type="button"
+                                            class="seat-mini-btn confirm-quick btn-seat-crear-reserva"
+                                            data-nombre="${escaparAtributo(asiento.nombre)}"
+                                            data-mesa-nombre="${escaparAtributo(m.nombre)}"
+                                            title="Crear ficha de reserva completa (menú, alergias, autobús)">
+                                        <i class="ph ph-user-plus"></i>
+                                    </button>
+                                    <button type="button"
+                                            class="seat-mini-btn remove-seat btn-seat-quitar-mp"
+                                            data-mesa-id="${escaparAtributo(m.id)}"
+                                            data-mp-id="${escaparAtributo(asiento.miembroPrevistoId || "")}"
+                                            title="Quitar de esta mesa">
+                                        <i class="ph ph-x"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    // Caso B: Invitado con reserva asignado manualmente a esta mesa por las novias
                     const inv = asiento.inv || {};
                     const esNino = /ni[ñn]o|beb|infant/i.test(inv.menu || "");
                     const hayAlergia = Boolean(inv.tieneAlergia) && !/^(ninguna?|no|—|-|)$/i.test(inv.alergia || "");
                     const usaBus = /^s[íi]/i.test(inv.bus || "");
+                    const aliasTagHtml = asiento.aliasMesa
+                        ? `<span class="seat-alias-tag" title="Nombre previsto inicialmente en la mesa">«${escaparHTML(asiento.aliasMesa)}»</span>`
+                        : "";
 
                     const moveOptions = mesas.map(dest => {
                         const sel = normalizarNombrePersona(dest.nombre) === normalizarNombrePersona(m.nombre) ? "selected" : "";
@@ -3332,7 +3348,7 @@ function renderizarVistaMesas() {
                             <div class="seat-main-info">
                                 <span class="seat-num">${numSillaActiva}</span>
                                 <div class="seat-person-details">
-                                    <span class="seat-person-name">${escaparHTML(asiento.nombre)}</span>
+                                    <span class="seat-person-name">${escaparHTML(asiento.nombre)}${aliasTagHtml}</span>
                                     <div class="seat-person-meta">
                                         <span>${esNino ? "👶 Niño" : "🍽️ Adulto"}</span>
                                         ${hayAlergia ? `<span style="color:#dc2626; font-weight:700;">· ⚠️ ${escaparHTML(inv.alergia)}</span>` : ""}
@@ -3345,9 +3361,7 @@ function renderizarVistaMesas() {
                                 <select class="seat-move-select"
                                         data-reserva-id="${escaparAtributo(asiento.reservaId)}"
                                         data-guest-idx="${asiento.guestIndex}"
-                                        data-origen-mesa-id="${escaparAtributo(m.id)}"
-                                        data-mp-id="${escaparAtributo(asiento.miembroPrevistoId || "")}"
-                                        title="Mover a otra mesa o quitar de esta mesa">
+                                        title="Mover a otra mesa o devolver a pendientes">
                                     <option value="">— Quitar mesa —</option>
                                     ${moveOptions}
                                 </select>
@@ -3371,17 +3385,18 @@ function renderizarVistaMesas() {
                                 <div class="seat-person-details">
                                     <span class="seat-person-name">${escaparHTML(asiento.nombre)}</span>
                                     <div class="seat-person-meta">
-                                        <span>Aún no ha enviado su reserva</span>
+                                        <span>Pendiente de vincular o confirmar por las novias</span>
                                     </div>
                                 </div>
                             </div>
                             <div class="seat-right-controls">
                                 <span class="seat-status-pill pendiente">⏳ FALTA POR CONFIRMAR</span>
+                                ${generarSelectorOrganizarMpHTML(m.id, asiento.miembroPrevistoId, "pendiente")}
                                 <button type="button"
                                         class="seat-mini-btn confirm-quick btn-seat-crear-reserva"
                                         data-nombre="${escaparAtributo(asiento.nombre)}"
                                         data-mesa-nombre="${escaparAtributo(m.nombre)}"
-                                        title="Registrar confirmación manual por teléfono para esta persona">
+                                        title="Registrar confirmación manual nueva para esta persona">
                                     <i class="ph ph-check-bold"></i>
                                 </button>
                                 <button type="button"
@@ -3396,7 +3411,34 @@ function renderizarVistaMesas() {
                     `;
                 }
 
-                // NO ASISTE
+                // NO ASISTE (manual de miembro previsto o vinculado a reserva de no asistencia)
+                if (asiento.esMiembroPrevisto) {
+                    return `
+                        <div class="seat-row is-no-asiste">
+                            <div class="seat-main-info">
+                                <span class="seat-num">✕</span>
+                                <div class="seat-person-details">
+                                    <span class="seat-person-name">${escaparHTML(asiento.nombre)}</span>
+                                    <div class="seat-person-meta" style="color:#b91c1c;">
+                                        <span>Marcado como No Asiste por las novias (plaza libre)</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="seat-right-controls">
+                                <span class="seat-status-pill no-asiste">✕ NO ASISTE</span>
+                                ${generarSelectorOrganizarMpHTML(m.id, asiento.miembroPrevistoId, "no-asiste")}
+                                <button type="button"
+                                        class="seat-mini-btn remove-seat btn-seat-quitar-mp"
+                                        data-mesa-id="${escaparAtributo(m.id)}"
+                                        data-mp-id="${escaparAtributo(asiento.miembroPrevistoId || "")}"
+                                        title="Quitar definitivamente de esta mesa">
+                                    <i class="ph ph-x"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+
                 return `
                     <div class="seat-row is-no-asiste">
                         <div class="seat-main-info">
@@ -3422,9 +3464,9 @@ function renderizarVistaMesas() {
                                     class="seat-mini-btn remove-seat btn-seat-quitar-baja"
                                     data-mesa-id="${escaparAtributo(m.id)}"
                                     data-mesa-nombre="${escaparAtributo(m.nombre)}"
-                                    data-mp-id="${escaparAtributo(asiento.miembroPrevistoId || "")}"
+                                    data-mp-id=""
                                     data-reserva-id="${escaparAtributo(asiento.reservaId || "")}"
-                                    data-es-baja-explicita="${asiento.esBajaExplicita ? "1" : "0"}"
+                                    data-es-baja-explicita="1"
                                     title="Limpiar de la lista de esta mesa">
                                 <i class="ph ph-x"></i>
                             </button>
@@ -3489,7 +3531,7 @@ function renderizarVistaMesas() {
                 <form class="mesa-add-member-form" data-mesa-id="${escaparAtributo(m.id)}">
                     <input type="text"
                            class="mesa-add-member-input"
-                           placeholder="Añadir invitado a esta mesa (ej: Ana Ruiz o varios con coma)..."
+                           placeholder="Anotar persona prevista en esta mesa (ej: Tía Mari, Primo Luis)..."
                            autocomplete="off">
                     <button type="submit" class="app-btn app-btn-primary btn-sm">
                         <i class="ph ph-plus"></i> Añadir
@@ -3511,15 +3553,34 @@ function renderizarVistaMesas() {
         if (btnDel) btnDel.addEventListener("click", () => confirmarYEliminarMesa(m));
         if (btnVirtualSave) btnVirtualSave.addEventListener("click", () => convertirMesaVirtualEnReal(m.nombre));
 
-        // Eventos de los asientos de la mesa
+        // Eventos de los asientos confirmados de reservas (mover / quitar mesa)
         card.querySelectorAll(".seat-move-select").forEach(sel => {
             sel.addEventListener("change", function () {
                 const resId = this.getAttribute("data-reserva-id");
                 const gIdx = parseInt(this.getAttribute("data-guest-idx"), 10);
-                const origenMesaId = this.getAttribute("data-origen-mesa-id");
-                const mpId = this.getAttribute("data-mp-id");
                 const nuevaMesaNombre = this.value;
-                asignarInvitadoIndividualAMesa(resId, gIdx, nuevaMesaNombre, { origenMesaId, mpId });
+                asignarInvitadoIndividualAMesa(resId, gIdx, nuevaMesaNombre);
+            });
+        });
+
+        // Eventos de organización manual de personas previstas (cambiar estado o vincular con reserva)
+        card.querySelectorAll(".seat-mp-organize-select").forEach(sel => {
+            sel.addEventListener("change", function () {
+                const accion = this.value;
+                const mesaId = this.getAttribute("data-mesa-id");
+                const mpId = this.getAttribute("data-mp-id");
+                if (!accion || !mesaId || !mpId) return;
+
+                if (accion.startsWith("estado:")) {
+                    const nuevoEstado = accion.slice("estado:".length);
+                    cambiarEstadoManualMiembroPrevisto(mesaId, mpId, nuevoEstado);
+                } else if (accion.startsWith("vincular:")) {
+                    const [, resId, gIdxStr] = accion.split(":");
+                    vincularMiembroPrevistoConInvitado(mesaId, mpId, resId, parseInt(gIdxStr, 10));
+                } else if (accion.startsWith("vincular_baja:")) {
+                    const resBajaId = accion.slice("vincular_baja:".length);
+                    vincularMiembroPrevistoConBaja(mesaId, mpId, resBajaId);
+                }
             });
         });
 
@@ -3591,11 +3652,46 @@ function renderizarVistaMesas() {
 }
 
 /**
- * Asigna o mueve a UN invitado concreto dentro de una reserva a una mesa determinada (o lo deja sin mesa).
+ * Cambia manualmente el estado de una persona prevista en una mesa ("pendiente" | "confirmado" | "no-asiste").
  */
-async function asignarInvitadoIndividualAMesa(reservaId, guestIndex, nuevoNombreMesa, extra = {}) {
+async function cambiarEstadoManualMiembroPrevisto(mesaId, mpId, nuevoEstado) {
+    const mesa = todasLasMesas.find(m => m.id === mesaId);
+    if (!mesa || !mpId) return;
+
+    const estadoValido = nuevoEstado === "confirmado" || nuevoEstado === "no-asiste" ? nuevoEstado : "pendiente";
+    const miembro = mesa.miembrosPrevistos.find(mp => mp.id === mpId);
+    if (!miembro) return;
+
+    try {
+        const { db, mesasCollection } = await obtenerFirestore();
+        const actualizados = mesa.miembrosPrevistos.map(mp =>
+            mp.id === mpId ? { ...mp, estadoManual: estadoValido } : mp
+        );
+        await updateDoc(doc(db, mesasCollection, mesaId), {
+            miembrosPrevistos: actualizados,
+            updatedAt: Date.now()
+        });
+
+        const etiqueta = estadoValido === "confirmado"
+            ? "Confirmado"
+            : (estadoValido === "no-asiste" ? "NO ASISTE" : "FALTA POR CONFIRMAR");
+        mostrarToast(`${miembro.nombre}: marcado como ${etiqueta}`, "success");
+    } catch (err) {
+        console.error("Error cambiando estado manual en mesa:", err);
+        mostrarToast("No se pudo actualizar el estado en la mesa", "error");
+    }
+}
+
+/**
+ * Vincula manualmente una persona prevista de una mesa (ej. "Tía Mari") con un invitado real recibido
+ * en una reserva pendiente (ej. "María del Carmen García"), asignándole esa mesa y reemplazando el hueco previsto.
+ */
+async function vincularMiembroPrevistoConInvitado(mesaId, mpId, reservaId, guestIndex) {
+    const mesa = todasLasMesas.find(m => m.id === mesaId);
     const reserva = todasLasReservas.find(r => r.id === reservaId);
-    if (!reserva) return;
+    if (!mesa || !reserva) return;
+
+    const mp = mesa.miembrosPrevistos.find(item => item.id === mpId);
 
     try {
         const { db, reservasCollection, mesasCollection } = await obtenerFirestore();
@@ -3609,7 +3705,110 @@ async function asignarInvitadoIndividualAMesa(reservaId, guestIndex, nuevoNombre
                 alergia: "Ninguna",
                 bus: "no",
                 mesa: reserva.mesa || "",
-                mesaId: ""
+                mesaId: "",
+                aliasMesa: ""
+            }];
+
+        if (!listaInv[guestIndex]) return;
+
+        const nombreReal = listaInv[guestIndex].nombre || "Invitado";
+        const aliasDiferente = mp && normalizarNombrePersona(mp.nombre) !== normalizarNombrePersona(nombreReal)
+            ? mp.nombre
+            : "";
+
+        listaInv[guestIndex].mesa = mesa.nombre;
+        listaInv[guestIndex].mesaId = mesa.id;
+        listaInv[guestIndex].aliasMesa = aliasDiferente;
+
+        const nuevosMp = mesa.miembrosPrevistos.filter(item => item.id !== mpId);
+        const mesaResumen = resumirMesasDeInvitados(listaInv);
+
+        await Promise.all([
+            updateDoc(doc(db, mesasCollection, mesa.id), {
+                miembrosPrevistos: nuevosMp,
+                updatedAt: Date.now()
+            }),
+            updateDoc(doc(db, reservasCollection, reserva.id), {
+                invitados: listaInv,
+                mesa: mesaResumen,
+                updatedAt: Date.now()
+            })
+        ]);
+
+        mostrarToast(`${nombreReal} confirmado/a en ${mesa.nombre}`, "success");
+    } catch (err) {
+        console.error("Error vinculando miembro previsto con invitado:", err);
+        mostrarToast("No se pudo vincular el invitado a la mesa", "error");
+    }
+}
+
+/**
+ * Vincula manualmente una persona prevista de una mesa con una reserva de "No asisten",
+ * dejando constancia visual de la baja ("NO ASISTE") en la mesa sin duplicar filas.
+ */
+async function vincularMiembroPrevistoConBaja(mesaId, mpId, reservaBajaId) {
+    const mesa = todasLasMesas.find(m => m.id === mesaId);
+    const reservaBaja = todasLasReservas.find(r => r.id === reservaBajaId);
+    if (!mesa || !reservaBaja) return;
+
+    const mp = mesa.miembrosPrevistos.find(item => item.id === mpId);
+
+    try {
+        const { db, reservasCollection, mesasCollection } = await obtenerFirestore();
+
+        const etiquetaBaja = mp && normalizarNombrePersona(mp.nombre) !== normalizarNombrePersona(reservaBaja.nombres)
+            ? `${reservaBaja.nombres} (${mp.nombre})`
+            : reservaBaja.nombres;
+
+        const bajasActuales = Array.isArray(reservaBaja.noAsistenMesas) ? [...reservaBaja.noAsistenMesas] : [];
+        bajasActuales.push({
+            nombre: etiquetaBaja,
+            mesa: mesa.nombre,
+            mesaId: mesa.id
+        });
+
+        const nuevosMp = mesa.miembrosPrevistos.filter(item => item.id !== mpId);
+
+        await Promise.all([
+            updateDoc(doc(db, mesasCollection, mesa.id), {
+                miembrosPrevistos: nuevosMp,
+                updatedAt: Date.now()
+            }),
+            updateDoc(doc(db, reservasCollection, reservaBaja.id), {
+                noAsistenMesas: bajasActuales,
+                mesa: resumirMesasDeInvitados(bajasActuales),
+                updatedAt: Date.now()
+            })
+        ]);
+
+        mostrarToast(`Marcado como NO ASISTE en ${mesa.nombre}`, "info");
+    } catch (err) {
+        console.error("Error vinculando baja en mesa:", err);
+        mostrarToast("No se pudo vincular la baja a la mesa", "error");
+    }
+}
+
+/**
+ * Asigna o mueve a UN invitado concreto dentro de una reserva a una mesa determinada (o lo deja sin mesa).
+ */
+async function asignarInvitadoIndividualAMesa(reservaId, guestIndex, nuevoNombreMesa) {
+    const reserva = todasLasReservas.find(r => r.id === reservaId);
+    if (!reserva) return;
+
+    try {
+        const { db, reservasCollection } = await obtenerFirestore();
+
+        const listaInv = reserva.invitados && reserva.invitados.length > 0
+            ? reserva.invitados.map(inv => ({ ...inv }))
+            : [{
+                nombre: reserva.nombres,
+                menu: "adulto",
+                tieneAlergia: false,
+                alergia: "Ninguna",
+                bus: "no",
+                mesa: reserva.mesa || "",
+                mesaId: "",
+                aliasMesa: ""
             }];
 
         if (!listaInv[guestIndex]) return;
@@ -3622,17 +3821,8 @@ async function asignarInvitadoIndividualAMesa(reservaId, guestIndex, nuevoNombre
 
         listaInv[guestIndex].mesa = mesaLimpia;
         listaInv[guestIndex].mesaId = mesaDoc ? mesaDoc.id : "";
-
-        // Si el invitado provenía de un miembro previsto en otra mesa y se cambia o quita, limpiar el placeholder antiguo
-        if (extra.origenMesaId && extra.mpId && (!mesaDoc || mesaDoc.id !== extra.origenMesaId)) {
-            const mesaOrigen = todasLasMesas.find(m => m.id === extra.origenMesaId);
-            if (mesaOrigen) {
-                const nuevosMp = mesaOrigen.miembrosPrevistos.filter(mp => mp.id !== extra.mpId);
-                await updateDoc(doc(db, mesasCollection, mesaOrigen.id), {
-                    miembrosPrevistos: nuevosMp,
-                    updatedAt: Date.now()
-                });
-            }
+        if (!mesaLimpia) {
+            listaInv[guestIndex].aliasMesa = "";
         }
 
         const mesaResumen = resumirMesasDeInvitados(listaInv);
@@ -3645,7 +3835,7 @@ async function asignarInvitadoIndividualAMesa(reservaId, guestIndex, nuevoNombre
         mostrarToast(
             mesaLimpia
                 ? `${nombreInvitado} asignado/a a ${mesaLimpia}`
-                : `${nombreInvitado} quedó pendiente de asignar a mesa`,
+                : `${nombreInvitado} devuelto/a a pendientes de mesa`,
             "success"
         );
     } catch (err) {
@@ -3685,7 +3875,8 @@ async function anadirMiembrosPrevistosAMesa(mesaId, textoNombres) {
             yaEnMesaNorm.add(norm);
             agregados.push({
                 id: generarIdCorto(),
-                nombre: nom
+                nombre: nom,
+                estadoManual: "pendiente"
             });
         }
     });
@@ -3984,7 +4175,7 @@ if (formMesa) {
                         nombresVistos.add(norm);
                         return true;
                     })
-                    .map(nom => ({ id: generarIdCorto(), nombre: nom }));
+                    .map(nom => ({ id: generarIdCorto(), nombre: nom, estadoManual: "pendiente" }));
 
                 await addDoc(collection(db, mesasCollection), {
                     nombre,
@@ -4035,7 +4226,7 @@ async function confirmarYEliminarMesa(mesa) {
             const nuevosInv = (r.invitados || []).map(inv => {
                 if (inv.mesaId === mesa.id || normalizarNombrePersona(inv.mesa) === normNombre) {
                     cambio = true;
-                    return { ...inv, mesa: "", mesaId: "" };
+                    return { ...inv, mesa: "", mesaId: "", aliasMesa: "" };
                 }
                 return inv;
             });
@@ -4137,13 +4328,15 @@ function exportarCroquisMesasCSV() {
                 ? "Confirmado"
                 : (a.tipoAsiento === "pendiente" ? "FALTA POR CONFIRMAR" : "NO ASISTE");
             const inv = a.inv || {};
-            const menuTxt = a.tipoAsiento === "confirmado"
+            const tieneFichaReserva = Boolean(a.esReserva);
+            const nombreExport = a.aliasMesa ? `${a.nombre} (${a.aliasMesa})` : a.nombre;
+            const menuTxt = a.tipoAsiento === "confirmado" && tieneFichaReserva
                 ? (/ni[ñn]o|beb|infant/i.test(inv.menu || "") ? "Niño" : "Adulto")
                 : "";
-            const alergiaTxt = a.tipoAsiento === "confirmado"
+            const alergiaTxt = a.tipoAsiento === "confirmado" && tieneFichaReserva
                 ? (inv.tieneAlergia && inv.alergia ? inv.alergia : "Ninguna")
                 : "";
-            const busTxt = a.tipoAsiento === "confirmado"
+            const busTxt = a.tipoAsiento === "confirmado" && tieneFichaReserva
                 ? (/^s[íi]/i.test(inv.bus || "") ? "SÍ" : "No")
                 : "";
 
@@ -4151,7 +4344,7 @@ function exportarCroquisMesasCSV() {
                 m.ordenVisual,
                 m.nombre,
                 estadoTxt,
-                a.nombre,
+                nombreExport,
                 menuTxt,
                 alergiaTxt,
                 busTxt,

@@ -397,7 +397,7 @@ function renderizarFilasInvitados(
             const menuVal = (prev.menu || "adulto").toLowerCase().includes("ni") ? "niño" : "adulto";
             const tieneAlergia = Boolean(prev.tieneAlergia);
             const alergiaVal = tieneAlergia && prev.alergia && prev.alergia !== "Ninguna" ? prev.alergia : "";
-            const busVal = (prev.bus || "si").toLowerCase().startsWith("n") ? "no" : "si";
+            const busVal = String(prev.bus || "no").toLowerCase().startsWith("s") ? "si" : "no";
 
             const esNuevaMesaCustom = prev.mesaSelect === "__NUEVA_MESA__";
             const mesaActualVal = esNuevaMesaCustom ? "" : String(prev.mesa || "").trim();
@@ -716,7 +716,7 @@ function construirDatosReserva(formElement, countVal, prefix = "public", origen 
             const tieneAlergia = formData.get(`${namePrefix}has-allergy-${i}`) === "si";
             const alergiaRaw = (formData.get(`${namePrefix}alergia-tipo-${i}`) || "").trim();
             const alergia = tieneAlergia && alergiaRaw ? alergiaRaw : "Ninguna";
-            const busRaw = formData.get(`${namePrefix}bus-${i}`) || "si";
+            const busRaw = formData.get(`${namePrefix}bus-${i}`) || "no";
             const busTexto = busRaw === "si" ? "Sí" : "No";
 
             const invObj = {

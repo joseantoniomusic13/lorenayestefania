@@ -31,7 +31,7 @@
     <!-- Phosphor Icons (Librería moderna de iconos) -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-    <link rel="stylesheet" href="style.css?v=7">
+    <link rel="stylesheet" href="style.css?v=8">
 </head>
 
 <body>
@@ -122,36 +122,42 @@
             <div class="card hover-animate">
                 <div class="icon-wrapper"><i class="ph ph-bus"></i></div>
                 <h3>Autobuses</h3>
-                <p>Salida desde Lucena</p>
-                <p><strong>[Hora] h</strong></p>
+                <p>Salida desde el Recinto Ferial</p>
+                <p><strong>Salida: 19:10 h</strong></p>
+                <div class="itinerario-bus-return">
+                    <p><strong>Vuelta (al Recinto Ferial):</strong></p>
+                    <p>1.er autobús: <strong>3:00 h</strong></p>
+                    <p>2.º autobús: <strong>7:15 h</strong></p>
+                </div>
             </div>
 
             <div class="card hover-animate">
                 <div class="icon-wrapper"><i class="ph ph-heart"></i></div>
                 <h3>Ceremonia</h3>
                 <p>El "Sí, quiero"</p>
-                <p><strong>[Hora] h</strong></p>
+                <p><strong>19:30 h</strong></p>
             </div>
 
             <div class="card hover-animate">
                 <div class="icon-wrapper"><i class="ph ph-wine"></i></div>
                 <h3>Copa de Bienvenida</h3>
                 <p>Para ir calentando motores</p>
-                <p><strong>[Hora] h</strong></p>
+                <p><strong>21:00 h</strong></p>
             </div>
 
             <div class="card hover-animate">
                 <div class="icon-wrapper"><i class="ph ph-fork-knife"></i></div>
                 <h3>Banquete</h3>
                 <p>A disfrutar de la comida</p>
-                <p><strong>[Hora] h</strong></p>
+                <p><strong>A continuación</strong></p>
             </div>
 
             <div class="card hover-animate">
                 <div class="icon-wrapper"><i class="ph ph-music-notes"></i></div>
                 <h3>Fiesta</h3>
                 <p>¡A darlo todo en la pista!</p>
-                <p><strong>Hasta que el cuerpo aguante</strong></p>
+                <p><strong>Barra libre: 1:30 h</strong></p>
+                <p class="itinerario-subnote">Hasta que el cuerpo aguante</p>
             </div>
         </div>
     </section>
@@ -1016,6 +1022,58 @@
         </div>
     </div>
 
+    <!-- ============================================================
+         MODAL DE CONFIRMACIÓN DE HORARIO DE AUTOBUSES (PÚBLICO RSVP)
+         ============================================================ -->
+    <div id="modal-confirmar-bus" class="modal-privado" role="dialog" aria-modal="true" aria-labelledby="modal-bus-titulo">
+        <div class="modal-privado-overlay" id="modal-bus-overlay"></div>
+        <div class="modal-privado-box glass-effect modal-bus-box">
+            <button type="button" class="modal-privado-close" id="btn-cerrar-modal-bus" aria-label="Cerrar">
+                <i class="ph ph-x"></i>
+            </button>
+            <div class="modal-privado-icon">
+                <i class="ph ph-bus"></i>
+            </div>
+            <h2 id="modal-bus-titulo">Horario de Autobuses</h2>
+            <p id="modal-bus-resumen" class="modal-bus-intro">
+                Has indicado que necesitarás servicio de autobús. Por favor, ten en cuenta los horarios y el punto de salida y llegada:
+            </p>
+
+            <div class="modal-bus-schedule">
+                <div class="modal-bus-item">
+                    <div class="modal-bus-item-icon">
+                        <i class="ph ph-arrow-circle-right"></i>
+                    </div>
+                    <div class="modal-bus-item-info">
+                        <span class="modal-bus-label">Ida · Salida hacia la boda</span>
+                        <strong>19:10 h · Desde el Recinto Ferial</strong>
+                    </div>
+                </div>
+
+                <div class="modal-bus-item">
+                    <div class="modal-bus-item-icon">
+                        <i class="ph ph-arrow-circle-left"></i>
+                    </div>
+                    <div class="modal-bus-item-info">
+                        <span class="modal-bus-label">Vuelta · Regreso al Recinto Ferial</span>
+                        <strong>1.er autobús: 3:00 h</strong>
+                        <strong>2.º autobús: 7:15 h</strong>
+                        <span class="modal-bus-note">Ambos autobuses dejan a los invitados en el Recinto Ferial.</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-bus-actions">
+                <button type="button" id="btn-confirmar-bus-rsvp" class="btn btn-submit modal-bus-btn-confirm">
+                    Entendido, confirmar reserva <i class="ph ph-check-circle"></i>
+                </button>
+                <button type="button" id="btn-cancelar-bus-rsvp" class="modal-bus-btn-back">
+                    Volver al formulario
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast de notificaciones de la App -->
     <div id="app-toast" class="app-toast" aria-live="polite"></div>
 
@@ -1029,7 +1087,7 @@
     </audio>
 
     <!-- Inicialización de Firebase v13.2.0 + Lógica de la aplicación -->
-    <script type="module" src="script.js?v=11"></script>
+    <script type="module" src="script.js?v=12"></script>
 
 </body>
 

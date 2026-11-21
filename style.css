@@ -431,6 +431,24 @@ nav a:hover::after {
   font-size: 0.95rem;
 }
 
+.itinerario-bus-return {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(131, 52, 65, 0.2);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.itinerario-bus-return p {
+  font-size: 0.88rem;
+}
+
+.itinerario-subnote {
+  margin-top: 4px !important;
+  font-size: 0.85rem !important;
+  opacity: 0.85;
+}
+
 .allergens-cards .card {
   padding: 30px 20px;
 }
@@ -992,6 +1010,102 @@ footer p {
   justify-content: center;
   gap: 6px;
   animation: fadeIn 0.25s ease;
+}
+
+/* Modal público de confirmación de horario de Autobuses */
+.modal-bus-box {
+  max-width: 480px;
+  padding: 38px 30px 30px;
+}
+
+.modal-bus-intro {
+  margin-bottom: 18px !important;
+  line-height: 1.5;
+}
+
+.modal-bus-schedule {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  margin-bottom: 22px;
+}
+
+.modal-bus-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  background: var(--bg-color);
+  border: 1px solid rgba(131, 52, 65, 0.18);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.modal-bus-item-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(131, 52, 65, 0.1);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.modal-bus-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.92rem;
+  color: var(--text-dark);
+}
+
+.modal-bus-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--primary);
+}
+
+.modal-bus-note {
+  font-size: 0.82rem;
+  color: var(--text-light);
+  margin-top: 2px;
+}
+
+.modal-bus-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modal-bus-btn-confirm {
+  margin-top: 0 !important;
+  width: 100%;
+  justify-content: center;
+}
+
+.modal-bus-btn-back {
+  background: transparent;
+  border: 1px solid rgba(131, 52, 65, 0.25);
+  color: var(--text-light);
+  padding: 11px 18px;
+  border-radius: 30px;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modal-bus-btn-back:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(131, 52, 65, 0.05);
 }
 
 /* ==========================================================================

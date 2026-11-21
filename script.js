@@ -128,7 +128,7 @@ obtenerFirestore().catch(err => {
 // ==========================================================================
 // 2. CUENTA ATRÁS Y FUNCIONES DE LA WEB PÚBLICA
 // ==========================================================================
-const weddingDate = new Date("May 15, 2027 18:30:00").getTime();
+const weddingDate = new Date("May 15, 2027 19:30:00").getTime();
 
 setInterval(function () {
     const now = new Date().getTime();
@@ -897,6 +897,62 @@ async function eliminarDeGoogleSheets(reserva) {
     return null;
 }
 
+// Modal de confirmación de horario de autobuses al enviar el RSVP
+const modalConfirmarBus = document.getElementById("modal-confirmar-bus");
+const modalBusOverlay = document.getElementById("modal-bus-overlay");
+const btnCerrarModalBus = document.getElementById("btn-cerrar-modal-bus");
+const btnConfirmarBusRsvp = document.getElementById("btn-confirmar-bus-rsvp");
+const btnCancelarBusRsvp = document.getElementById("btn-cancelar-bus-rsvp");
+const modalBusResumen = document.getElementById("modal-bus-resumen");
+let resolverConfirmacionBus = null;
+
+function cerrarModalConfirmarBus(resultado = false) {
+    if (modalConfirmarBus) {
+        modalConfirmarBus.classList.remove("activo");
+    }
+    if (!document.body.classList.contains("app-privada-activa")) {
+        document.body.style.overflow = "";
+    }
+    if (resolverConfirmacionBus) {
+        const fn = resolverConfirmacionBus;
+        resolverConfirmacionBus = null;
+        fn(resultado);
+    }
+}
+
+function solicitarConfirmacionAutobus(reservaData) {
+    const invitadosBus = Array.isArray(reservaData.invitados)
+        ? reservaData.invitados.filter(inv => inv && inv.bus === "si")
+        : [];
+
+    if (invitadosBus.length === 0) {
+        return Promise.resolve(true);
+    }
+
+    if (!modalConfirmarBus) {
+        return Promise.resolve(true);
+    }
+
+    if (modalBusResumen) {
+        const numPlazas = invitadosBus.length;
+        const textoPlazas = numPlazas === 1 ? "1 plaza de autobús" : `${numPlazas} plazas de autobús`;
+        modalBusResumen.innerHTML = `Has solicitado <strong>${textoPlazas}</strong>. Antes de enviar tu confirmación, recuerda el horario y punto de salida y llegada:`;
+    }
+
+    modalConfirmarBus.classList.add("activo");
+    document.body.style.overflow = "hidden";
+    setTimeout(() => btnConfirmarBusRsvp && btnConfirmarBusRsvp.focus(), 100);
+
+    return new Promise((resolve) => {
+        resolverConfirmacionBus = resolve;
+    });
+}
+
+if (modalBusOverlay) modalBusOverlay.addEventListener("click", () => cerrarModalConfirmarBus(false));
+if (btnCerrarModalBus) btnCerrarModalBus.addEventListener("click", () => cerrarModalConfirmarBus(false));
+if (btnCancelarBusRsvp) btnCancelarBusRsvp.addEventListener("click", () => cerrarModalConfirmarBus(false));
+if (btnConfirmarBusRsvp) btnConfirmarBusRsvp.addEventListener("click", () => cerrarModalConfirmarBus(true));
+
 if (rsvpForm) {
     rsvpForm.addEventListener("submit", async function (e) {
         e.preventDefault();
@@ -905,13 +961,22 @@ if (rsvpForm) {
         const formMessage = document.getElementById("form-message");
         const guestCount = document.getElementById("guest-count").value;
 
+        const formData = new FormData(rsvpForm);
+        const reservaData = construirDatosReserva(rsvpForm, guestCount, "public", "web");
+
+        // Si algún asistente ha marcado autobús, mostrar modal recordatorio de horarios antes de confirmar
+        const tieneBus = Array.isArray(reservaData.invitados) && reservaData.invitados.some(inv => inv && inv.bus === "si");
+        if (tieneBus) {
+            const confirmadoBus = await solicitarConfirmacionAutobus(reservaData);
+            if (!confirmadoBus) {
+                return;
+            }
+        }
+
         const originalBtnText = btnSubmit.innerHTML;
         btnSubmit.innerHTML = 'Enviando... <i class="ph ph-spinner icon-pulse"></i>';
         btnSubmit.disabled = true;
         if (formMessage) formMessage.style.display = "none";
-
-        const formData = new FormData(rsvpForm);
-        const reservaData = construirDatosReserva(rsvpForm, guestCount, "public", "web");
 
         const isModificacion = localStorage.getItem("wedding_rsvp_status") === "confirmed";
         const existingDocId = localStorage.getItem("wedding_rsvp_doc_id");
@@ -5783,7 +5848,9 @@ if (btnAceptarEliminar) btnAceptarEliminar.addEventListener("click", () => cerra
 // Cerrar modales con Escape
 document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") {
-        if (modalConfirmarEliminar && modalConfirmarEliminar.classList.contains("activo")) {
+        if (modalConfirmarBus && modalConfirmarBus.classList.contains("activo")) {
+            cerrarModalConfirmarBus(false);
+        } else if (modalConfirmarEliminar && modalConfirmarEliminar.classList.contains("activo")) {
             cerrarModalConfirmarEliminar(false);
         } else if (modalMesa && modalMesa.classList.contains("activo")) {
             cerrarModalMesa();
